@@ -6,7 +6,12 @@ import 'user_profile_screen.dart';
 import 'media_player_widget.dart';
 import 'share_modal.dart';
 import 'feed_edit_modal.dart';
+import 'live_streaming_screen.dart';
+import 'trending_feeds_screen.dart';
+import 'report_modal.dart';
 import 'dart:async';
+import 'package:jamjamapp/core/services/recommendation_service.dart';
+import 'package:jamjamapp/core/services/offline_service.dart';
 
 class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
@@ -39,6 +44,12 @@ class _HomeTabState extends State<HomeTab> {
   
   // 팔로우 상태 관리
   final Set<String> _followedUsers = {};
+  
+  // 새로운 기능들을 위한 상태
+  bool _isPersonalizedMode = true;
+  bool _isOfflineMode = false;
+  final RecommendationService _recommendationService = RecommendationService();
+  final OfflineService _offlineService = OfflineService();
   
   // 필터 상태
   String _selectedGenre = '전체';
@@ -537,10 +548,16 @@ class _HomeTabState extends State<HomeTab> {
     setState(() {
       _likedFeeds[index] = !(_likedFeeds[index] ?? false);
     });
+
+    final feed = _feedData[index];
+    final isLiked = _likedFeeds[index] ?? false;
+    
+    // 사용자 행동 기록
+    _recordUserAction(isLiked ? 'like' : 'unlike', feed);
     
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(_likedFeeds[index]! ? '좋아요' : '좋아요 취소'),
+        content: Text(isLiked ? '좋아요를 눌렀습니다!' : '좋아요를 취소했습니다.'),
         backgroundColor: AppTheme.accentPink,
         duration: const Duration(seconds: 1),
       ),
@@ -892,6 +909,24 @@ class _HomeTabState extends State<HomeTab> {
             ),
           ),
           const Spacer(),
+          // 개인화 모드 토글 버튼
+          IconButton(
+            icon: Icon(
+              _isPersonalizedMode ? Icons.person : Icons.people,
+              color: _isPersonalizedMode ? AppTheme.accentPink : AppTheme.grey,
+            ),
+            onPressed: _togglePersonalizedMode,
+            tooltip: '개인화 추천',
+          ),
+          // 오프라인 모드 토글 버튼
+          IconButton(
+            icon: Icon(
+              _isOfflineMode ? Icons.wifi_off : Icons.wifi,
+              color: _isOfflineMode ? AppTheme.accentPink : AppTheme.grey,
+            ),
+            onPressed: _toggleOfflineMode,
+            tooltip: '오프라인 모드',
+          ),
           // 실시간 업데이트 토글 버튼
           IconButton(
             icon: Icon(
@@ -900,6 +935,12 @@ class _HomeTabState extends State<HomeTab> {
             ),
             onPressed: _toggleRealtimeUpdates,
             tooltip: '실시간 업데이트',
+          ),
+          // 트렌딩 피드 버튼
+          IconButton(
+            icon: const Icon(Icons.trending_up, color: AppTheme.white),
+            onPressed: _openTrendingFeeds,
+            tooltip: '트렌딩 피드',
           ),
           // 필터 버튼
           IconButton(
@@ -1156,6 +1197,7 @@ class _HomeTabState extends State<HomeTab> {
         feed: feed,
         onFeedUpdated: _updateFeed,
         onFeedDeleted: _deleteFeed,
+        onReportFeed: _showReportModal,
       ),
     );
   }
@@ -1193,6 +1235,115 @@ class _HomeTabState extends State<HomeTab> {
       ),
       builder: (context) => ShareModal(feed: feed),
     );
+  }
+
+  /// 신고 모달 표시
+  void _showReportModal(Map<String, dynamic> feed) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.secondaryBlack,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => ReportModal(feed: feed),
+    );
+  }
+
+  /// 개인화 모드 토글
+  void _togglePersonalizedMode() {
+    setState(() {
+      _isPersonalizedMode = !_isPersonalizedMode;
+    });
+
+    if (_isPersonalizedMode) {
+      _applyPersonalizedRecommendations();
+    } else {
+      _loadInitialData(); // 원래 데이터로 복원
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(_isPersonalizedMode ? '개인화 추천 모드 활성화' : '전체 피드 모드 활성화'),
+        backgroundColor: AppTheme.accentPink,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  /// 개인화 추천 적용
+  void _applyPersonalizedRecommendations() {
+    final personalizedFeeds = _recommendationService.getPersonalizedFeeds(_allFeedData);
+    setState(() {
+      _feedData = personalizedFeeds.take(_itemsPerPage).toList();
+      _currentPage = 1;
+      _hasMoreData = personalizedFeeds.length > _itemsPerPage;
+    });
+  }
+
+  /// 오프라인 모드 토글
+  void _toggleOfflineMode() {
+    setState(() {
+      _isOfflineMode = !_isOfflineMode;
+    });
+
+    _offlineService.setOfflineMode(_isOfflineMode);
+
+    if (_isOfflineMode) {
+      _loadOfflineData();
+    } else {
+      _loadInitialData();
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(_isOfflineMode ? '오프라인 모드 활성화' : '온라인 모드 활성화'),
+        backgroundColor: AppTheme.accentPink,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  /// 오프라인 데이터 로드
+  Future<void> _loadOfflineData() async {
+    final cachedFeeds = await _offlineService.loadCachedFeeds();
+    if (cachedFeeds.isNotEmpty) {
+      setState(() {
+        _feedData = cachedFeeds.take(_itemsPerPage).toList();
+        _currentPage = 1;
+        _hasMoreData = cachedFeeds.length > _itemsPerPage;
+      });
+    }
+  }
+
+  /// 라이브 스트림 시작
+  void _startLiveStream() {
+    final streamData = {
+      'id': DateTime.now().millisecondsSinceEpoch,
+      'title': '라이브 음악 스트림',
+      'author': 'LiveStreamer',
+      'authorAvatar': '🎵',
+      'genre': '팝',
+    };
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => LiveStreamingScreen(stream: streamData),
+      ),
+    );
+  }
+
+  /// 트렌딩 피드 열기
+  void _openTrendingFeeds() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const TrendingFeedsScreen(),
+      ),
+    );
+  }
+
+  /// 사용자 행동 기록 (추천 시스템용)
+  void _recordUserAction(String action, Map<String, dynamic> feed) {
+    _recommendationService.recordUserAction(action, feed);
   }
 
   // 사용자 프로필로 이동
