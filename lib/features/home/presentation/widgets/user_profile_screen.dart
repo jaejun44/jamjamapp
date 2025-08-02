@@ -36,69 +36,72 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.primaryBlack,
-      body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            // 앱바
-            SliverAppBar(
-              backgroundColor: AppTheme.primaryBlack,
-              leading: IconButton(
-                icon: const Icon(Icons.arrow_back, color: AppTheme.white),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.more_vert, color: AppTheme.white),
-                  onPressed: () => _showOptionsModal(),
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        backgroundColor: AppTheme.primaryBlack,
+        body: SafeArea(
+          child: CustomScrollView(
+            slivers: [
+              // 앱바
+              SliverAppBar(
+                backgroundColor: AppTheme.primaryBlack,
+                leading: IconButton(
+                  icon: const Icon(Icons.arrow_back, color: AppTheme.white),
+                  onPressed: () => Navigator.of(context).pop(),
                 ),
-              ],
-            ),
-            
-            // 프로필 헤더
-            SliverToBoxAdapter(
-              child: _buildProfileHeader(),
-            ),
-            
-            // 통계
-            SliverToBoxAdapter(
-              child: _buildStats(),
-            ),
-            
-            // 액션 버튼들
-            SliverToBoxAdapter(
-              child: _buildActionButtons(),
-            ),
-            
-            // 탭바
-            SliverPersistentHeader(
-              pinned: true,
-              delegate: _SliverAppBarDelegate(
-                TabBar(
-                  labelColor: AppTheme.accentPink,
-                  unselectedLabelColor: AppTheme.grey,
-                  indicatorColor: AppTheme.accentPink,
-                  tabs: const [
-                    Tab(text: '피드'),
-                    Tab(text: '음악'),
-                    Tab(text: '컬렉션'),
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.more_vert, color: AppTheme.white),
+                    onPressed: () => _showOptionsModal(),
+                  ),
+                ],
+              ),
+              
+              // 프로필 헤더
+              SliverToBoxAdapter(
+                child: _buildProfileHeader(),
+              ),
+              
+              // 통계
+              SliverToBoxAdapter(
+                child: _buildStats(),
+              ),
+              
+              // 액션 버튼들
+              SliverToBoxAdapter(
+                child: _buildActionButtons(),
+              ),
+              
+              // 탭바
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: _SliverAppBarDelegate(
+                  TabBar(
+                    labelColor: AppTheme.accentPink,
+                    unselectedLabelColor: AppTheme.grey,
+                    indicatorColor: AppTheme.accentPink,
+                    tabs: const [
+                      Tab(text: '피드'),
+                      Tab(text: '음악'),
+                      Tab(text: '컬렉션'),
+                    ],
+                  ),
+                ),
+              ),
+              
+              // 탭 콘텐츠
+              SliverFillRemaining(
+                child: TabBarView(
+                  children: [
+                    _buildFeedTab(),
+                    _buildMusicTab(),
+                    _buildCollectionTab(),
                   ],
                 ),
               ),
-            ),
-            
-            // 탭 콘텐츠
-            SliverFillRemaining(
-              child: TabBarView(
-                children: [
-                  _buildFeedTab(),
-                  _buildMusicTab(),
-                  _buildCollectionTab(),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

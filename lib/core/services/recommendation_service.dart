@@ -162,7 +162,7 @@ class RecommendationService {
     }).toList();
 
     // 점수순으로 정렬
-    scoredFeeds.sort((a, b) => b['score'].compareTo(a['score']));
+    scoredFeeds.sort((a, b) => (b['score'] as double).compareTo(a['score'] as double));
 
     // 상위 70%는 개인화, 하위 30%는 다양성을 위해 랜덤 선택
     final personalizedCount = (scoredFeeds.length * 0.7).round();

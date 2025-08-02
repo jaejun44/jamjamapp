@@ -1197,7 +1197,6 @@ class _HomeTabState extends State<HomeTab> {
         feed: feed,
         onFeedUpdated: _updateFeed,
         onFeedDeleted: _deleteFeed,
-        onReportFeed: _showReportModal,
       ),
     );
   }

@@ -65,7 +65,7 @@ class _FileUploadModalState extends State<FileUploadModal> {
       if (file != null && mounted) {
         final bytes = await file.readAsBytes();
         setState(() {
-          _selectedFileName = file.name;
+          _selectedFileName = file?.name ?? 'unknown_file';
           _fileSize = '${(bytes.length / (1024 * 1024)).toStringAsFixed(1)} MB';
           _selectedFileData = bytes;
         });
