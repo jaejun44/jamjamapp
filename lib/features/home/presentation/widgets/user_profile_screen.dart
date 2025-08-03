@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
+import '../../../chat/presentation/screens/chat_room_screen.dart';
 
 class UserProfileScreen extends StatefulWidget {
   final String username;
@@ -319,10 +320,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   }
 
   void _sendMessage() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('메시지 기능 준비 중'),
-        backgroundColor: AppTheme.accentPink,
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ChatRoomScreen(
+          userName: widget.username,
+          userAvatar: widget.userAvatar,
+        ),
       ),
     );
   }

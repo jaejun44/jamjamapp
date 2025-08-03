@@ -3,6 +3,11 @@ import 'package:jamjamapp/core/theme/app_theme.dart';
 import '../../../auth/presentation/widgets/login_modal.dart';
 import 'profile_edit_modal.dart';
 import 'social_follow_modal.dart';
+import 'profile_settings_screen.dart';
+import 'my_music_screen.dart';
+import 'liked_content_screen.dart';
+import 'bookmarks_screen.dart';
+import 'friends_screen.dart';
 import 'dart:typed_data'; // 웹 환경을 위해 Uint8List 사용
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -34,15 +39,32 @@ class _ProfileTabState extends State<ProfileTab> {
   Future<void> _loadUserData() async {
     final prefs = await SharedPreferences.getInstance();
     
-    setState(() {
-      _isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
-      _userName = prefs.getString('userName') ?? 'JamMaster';
-      _userNickname = prefs.getString('userNickname') ?? 'jammaster';
-      _userBio = prefs.getString('userBio') ?? '재즈와 팝을 사랑하는 음악인입니다 🎵';
-      _userInstruments = prefs.getString('userInstruments') ?? '기타, 피아노';
-    });
+    // 로그인 상태 확인
+    final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
     
-    print('사용자 데이터 로드됨: 로그인=$_isLoggedIn, 이름=$_userName'); // 디버깅
+    if (isLoggedIn) {
+      // 로그인된 상태라면 저장된 사용자 정보 로드
+      setState(() {
+        _isLoggedIn = true;
+        _userName = prefs.getString('userName') ?? 'JamMaster';
+        _userNickname = prefs.getString('userNickname') ?? 'jammaster';
+        _userBio = prefs.getString('userBio') ?? '재즈와 팝을 사랑하는 음악인입니다 🎵';
+        _userInstruments = prefs.getString('userInstruments') ?? '기타, 피아노';
+      });
+      
+      print('자동 로그인됨: 사용자=$_userName');
+    } else {
+      // 로그인되지 않은 상태
+      setState(() {
+        _isLoggedIn = false;
+        _userName = 'JamMaster';
+        _userNickname = 'jammaster';
+        _userBio = '재즈와 팝을 사랑하는 음악인입니다 🎵';
+        _userInstruments = '기타, 피아노';
+      });
+      
+      print('로그인되지 않은 상태');
+    }
   }
 
   // 로컬에 사용자 데이터 저장
@@ -59,28 +81,31 @@ class _ProfileTabState extends State<ProfileTab> {
   }
 
   void _showLoginModal() {
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (context) => const LoginModal(),
-    ).then((result) async {
-      // 로그인 모달에서 true가 반환되면 로그인 성공
-      if (result == true) {
-        setState(() {
-          _isLoggedIn = true;
-        });
-        
-        await _saveUserData(); // 로그인 상태 저장
-        
-        if (!mounted) return;
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('로그인되었습니다!'),
-            backgroundColor: AppTheme.accentPink,
-          ),
-        );
-      }
-    });
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => LoginModal(
+        onLoginSuccess: (success) async {
+          if (success) {
+            setState(() {
+              _isLoggedIn = true;
+            });
+            
+            await _saveUserData(); // 로그인 상태 저장
+            
+            if (!mounted) return;
+            
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('로그인되었습니다!'),
+                backgroundColor: AppTheme.accentPink,
+              ),
+            );
+          }
+        },
+      ),
+    );
   }
 
   void _logout() async {
@@ -95,7 +120,8 @@ class _ProfileTabState extends State<ProfileTab> {
       _userInstruments = '기타, 피아노';
     });
     
-    await _saveUserData(); // 로그아웃 상태 저장
+    // 모든 사용자 데이터 완전 초기화
+    await _clearAllUserData();
     
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -103,6 +129,24 @@ class _ProfileTabState extends State<ProfileTab> {
         backgroundColor: AppTheme.accentPink,
       ),
     );
+  }
+
+  // 모든 사용자 데이터 초기화
+  Future<void> _clearAllUserData() async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    // 로그인 상태 초기화
+    await prefs.setBool('isLoggedIn', false);
+    
+    // 사용자 정보 초기화
+    await prefs.remove('userName');
+    await prefs.remove('userNickname');
+    await prefs.remove('userEmail');
+    await prefs.remove('userBio');
+    await prefs.remove('userInstruments');
+    await prefs.remove('loginTime');
+    
+    print('모든 사용자 데이터 초기화됨');
   }
 
   void _showProfileEditModal() {
@@ -158,7 +202,11 @@ class _ProfileTabState extends State<ProfileTab> {
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () {
-              // TODO: 설정 화면으로 이동
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const ProfileSettingsScreen(),
+                ),
+              );
             },
           ),
         ],
@@ -341,7 +389,11 @@ class _ProfileTabState extends State<ProfileTab> {
             title: '내 음악',
             subtitle: '업로드한 음악들을 확인해보세요',
             onTap: () {
-              // TODO: 내 음악 화면으로 이동
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const MyMusicScreen(),
+                ),
+              );
             },
           ),
           _buildMenuItem(
@@ -349,7 +401,11 @@ class _ProfileTabState extends State<ProfileTab> {
             title: '좋아요',
             subtitle: '좋아요한 콘텐츠를 확인해보세요',
             onTap: () {
-              // TODO: 좋아요 화면으로 이동
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const LikedContentScreen(),
+                ),
+              );
             },
           ),
           _buildMenuItem(
@@ -357,7 +413,11 @@ class _ProfileTabState extends State<ProfileTab> {
             title: '북마크',
             subtitle: '저장한 콘텐츠를 확인해보세요',
             onTap: () {
-              // TODO: 북마크 화면으로 이동
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const BookmarksScreen(),
+                ),
+              );
             },
           ),
           _buildMenuItem(
@@ -365,7 +425,23 @@ class _ProfileTabState extends State<ProfileTab> {
             title: '친구',
             subtitle: '친구 목록을 확인해보세요',
             onTap: () {
-              // TODO: 친구 화면으로 이동
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const FriendsScreen(),
+                ),
+              );
+            },
+          ),
+          _buildMenuItem(
+            icon: Icons.settings,
+            title: '설정',
+            subtitle: '앱 설정을 관리해보세요',
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const ProfileSettingsScreen(),
+                ),
+              );
             },
           ),
           _buildMenuItem(

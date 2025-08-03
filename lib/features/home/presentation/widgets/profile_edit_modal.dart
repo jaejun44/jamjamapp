@@ -36,8 +36,8 @@ class _ProfileEditModalState extends State<ProfileEditModal> {
   
   bool _isSaving = false;
   bool _isImageUploading = false;
-  Uint8List? _selectedImageBytes;
-  String? _selectedImageName;
+  Uint8List? _profileImageBytes; // 프로필 이미지 바이트 데이터
+  String? _profileImageName; // 이미지 파일명
   final ImagePicker _picker = ImagePicker();
 
   @override
@@ -117,8 +117,8 @@ class _ProfileEditModalState extends State<ProfileEditModal> {
         print('이미지 선택됨: $imageName'); // 디버깅
         
         setState(() {
-          _selectedImageBytes = imageBytes;
-          _selectedImageName = imageName;
+          _profileImageBytes = imageBytes;
+          _profileImageName = imageName;
           _isImageUploading = false;
         });
         
@@ -198,10 +198,10 @@ class _ProfileEditModalState extends State<ProfileEditModal> {
                     CircleAvatar(
                       radius: 50,
                       backgroundColor: AppTheme.accentPink,
-                      backgroundImage: _selectedImageBytes != null 
-                          ? MemoryImage(_selectedImageBytes!) 
+                      backgroundImage: _profileImageBytes != null 
+                          ? MemoryImage(_profileImageBytes!) 
                           : null,
-                      child: _selectedImageBytes == null
+                      child: _profileImageBytes == null
                           ? const Icon(Icons.person, color: AppTheme.white, size: 50)
                           : null,
                     ),

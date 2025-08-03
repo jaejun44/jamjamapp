@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
 import '../../../chat/presentation/screens/chat_room_screen.dart';
 import 'user_profile_screen.dart';
+import 'dart:async';
 
 class ChatTab extends StatefulWidget {
   const ChatTab({super.key});
@@ -11,7 +12,19 @@ class ChatTab extends StatefulWidget {
 }
 
 class _ChatTabState extends State<ChatTab> {
-  // 실시간 채팅 데이터
+  // 검색 상태
+  String _searchQuery = '';
+  List<Map<String, dynamic>> _filteredChatList = [];
+  
+  // 실시간 업데이트 상태
+  Timer? _realtimeUpdateTimer;
+  bool _isRealtimeUpdateEnabled = true;
+  
+  // 필터 상태
+  String _selectedFilter = '전체';
+  final List<String> _filterOptions = ['전체', '온라인', '미읽음', '미디어'];
+
+  // 실시간 채팅 데이터 (확장된 버전)
   final List<Map<String, dynamic>> _chatList = [
     {
       'id': 1,
@@ -22,6 +35,10 @@ class _ChatTabState extends State<ChatTab> {
       'unreadCount': 2,
       'isOnline': true,
       'lastMessageType': 'text',
+      'isTyping': false,
+      'lastSeen': '방금 전',
+      'muted': false,
+      'pinned': false,
     },
     {
       'id': 2,
@@ -32,6 +49,10 @@ class _ChatTabState extends State<ChatTab> {
       'unreadCount': 0,
       'isOnline': false,
       'lastMessageType': 'media',
+      'isTyping': false,
+      'lastSeen': '5분 전',
+      'muted': false,
+      'pinned': true,
     },
     {
       'id': 3,
@@ -42,6 +63,10 @@ class _ChatTabState extends State<ChatTab> {
       'unreadCount': 1,
       'isOnline': true,
       'lastMessageType': 'text',
+      'isTyping': true,
+      'lastSeen': '방금 전',
+      'muted': false,
+      'pinned': false,
     },
     {
       'id': 4,
@@ -52,6 +77,10 @@ class _ChatTabState extends State<ChatTab> {
       'unreadCount': 0,
       'isOnline': false,
       'lastMessageType': 'text',
+      'isTyping': false,
+      'lastSeen': '30분 전',
+      'muted': true,
+      'pinned': false,
     },
     {
       'id': 5,
@@ -62,26 +91,278 @@ class _ChatTabState extends State<ChatTab> {
       'unreadCount': 3,
       'isOnline': true,
       'lastMessageType': 'media',
+      'isTyping': false,
+      'lastSeen': '방금 전',
+      'muted': false,
+      'pinned': false,
     },
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _filteredChatList = _chatList;
+    _startRealtimeUpdates();
+  }
+
+  @override
+  void dispose() {
+    _realtimeUpdateTimer?.cancel();
+    super.dispose();
+  }
+
+  /// 실시간 업데이트 시작
+  void _startRealtimeUpdates() {
+    _realtimeUpdateTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (_isRealtimeUpdateEnabled && mounted) {
+        _simulateNewMessages();
+      }
+    });
+  }
+
+  /// 새 메시지 시뮬레이션
+  void _simulateNewMessages() {
+    final random = DateTime.now().millisecondsSinceEpoch % _chatList.length;
+    if (random < _chatList.length) {
+      setState(() {
+        _chatList[random]['unreadCount'] = (_chatList[random]['unreadCount'] ?? 0) + 1;
+        _chatList[random]['lastMessage'] = _getRandomMessage();
+        _chatList[random]['timestamp'] = '방금 전';
+        _chatList[random]['isTyping'] = false;
+      });
+      _filterChats();
+    }
+  }
+
+  /// 랜덤 메시지 생성
+  String _getRandomMessage() {
+    final messages = [
+      '새로운 음악 아이디어가 있어요! 🎵',
+      '함께 연주할까요? 🎸',
+      '오늘 연습한 곡 공유해요',
+      '라이브 스트림 시작할게요 🎥',
+      '음악 파일 보내드릴게요 📁',
+    ];
+    return messages[DateTime.now().millisecondsSinceEpoch % messages.length];
+  }
+
+  /// 채팅 필터링
+  void _filterChats() {
+    List<Map<String, dynamic>> filtered = _chatList;
+
+    // 검색 필터
+    if (_searchQuery.isNotEmpty) {
+      filtered = filtered.where((chat) {
+        final query = _searchQuery.toLowerCase();
+        return chat['userName'].toLowerCase().contains(query) ||
+               chat['lastMessage'].toLowerCase().contains(query);
+      }).toList();
+    }
+
+    // 상태 필터
+    switch (_selectedFilter) {
+      case '온라인':
+        filtered = filtered.where((chat) => chat['isOnline']).toList();
+        break;
+      case '미읽음':
+        filtered = filtered.where((chat) => (chat['unreadCount'] ?? 0) > 0).toList();
+        break;
+      case '미디어':
+        filtered = filtered.where((chat) => chat['lastMessageType'] == 'media').toList();
+        break;
+    }
+
+    setState(() {
+      _filteredChatList = filtered;
+    });
+  }
+
+  /// 검색 쿼리 변경
+  void _onSearchChanged(String query) {
+    setState(() {
+      _searchQuery = query;
+    });
+    _filterChats();
+  }
+
+  /// 필터 변경
+  void _onFilterChanged(String filter) {
+    setState(() {
+      _selectedFilter = filter;
+    });
+    _filterChats();
+  }
+
+  /// 채팅방 옵션 표시
+  void _showChatOptions(Map<String, dynamic> chat) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.secondaryBlack,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 헤더
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 20,
+                  backgroundColor: AppTheme.accentPink,
+                  child: Text(chat['userAvatar'], style: const TextStyle(fontSize: 16)),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        chat['userName'],
+                        style: const TextStyle(
+                          color: AppTheme.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      Text(
+                        chat['isOnline'] ? '온라인' : '오프라인',
+                        style: const TextStyle(color: AppTheme.grey, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            
+            // 옵션들
+            _buildOptionTile(
+              icon: Icons.person,
+              title: '프로필 보기',
+              onTap: () {
+                Navigator.of(context).pop();
+                _showUserProfile(chat['userName']);
+              },
+            ),
+            _buildOptionTile(
+              icon: chat['pinned'] ? Icons.push_pin : Icons.push_pin_outlined,
+              title: chat['pinned'] ? '고정 해제' : '고정하기',
+              onTap: () {
+                setState(() {
+                  chat['pinned'] = !chat['pinned'];
+                });
+                Navigator.of(context).pop();
+              },
+            ),
+            _buildOptionTile(
+              icon: chat['muted'] ? Icons.volume_up : Icons.volume_off,
+              title: chat['muted'] ? '알림 켜기' : '알림 끄기',
+              onTap: () {
+                setState(() {
+                  chat['muted'] = !chat['muted'];
+                });
+                Navigator.of(context).pop();
+              },
+            ),
+            _buildOptionTile(
+              icon: Icons.delete,
+              title: '채팅방 삭제',
+              isDestructive: true,
+              onTap: () {
+                Navigator.of(context).pop();
+                _deleteChat(chat);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 옵션 타일 빌드
+  Widget _buildOptionTile({
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+    bool isDestructive = false,
+  }) {
+    return ListTile(
+      leading: Icon(
+        icon,
+        color: isDestructive ? Colors.red : AppTheme.accentPink,
+      ),
+      title: Text(
+        title,
+        style: TextStyle(
+          color: isDestructive ? Colors.red : AppTheme.white,
+        ),
+      ),
+      onTap: onTap,
+    );
+  }
+
+  /// 채팅방 삭제
+  void _deleteChat(Map<String, dynamic> chat) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.secondaryBlack,
+        title: const Text('채팅방 삭제', style: TextStyle(color: AppTheme.white)),
+        content: Text(
+          '${chat['userName']}과의 채팅방을 삭제하시겠습니까?',
+          style: const TextStyle(color: AppTheme.white),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('취소', style: TextStyle(color: AppTheme.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                _chatList.removeWhere((item) => item['id'] == chat['id']);
+              });
+              _filterChats();
+              Navigator.of(context).pop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('채팅방이 삭제되었습니다'),
+                  backgroundColor: AppTheme.accentPink,
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('삭제'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.primaryBlack,
       appBar: AppBar(
+        backgroundColor: AppTheme.primaryBlack,
         title: const Text('채팅'),
         actions: [
           IconButton(
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('새 메시지 기능 준비 중'),
-                  backgroundColor: AppTheme.accentPink,
-                ),
-              );
-            },
+            onPressed: () => _showNewMessageModal(),
             icon: const Icon(Icons.edit),
+          ),
+          PopupMenuButton<String>(
+            onSelected: _onFilterChanged,
+            itemBuilder: (context) => _filterOptions.map((filter) {
+              return PopupMenuItem(
+                value: filter,
+                child: Text(filter),
+              );
+            }).toList(),
+            child: const Icon(Icons.filter_list),
           ),
         ],
       ),
@@ -91,9 +372,21 @@ class _ChatTabState extends State<ChatTab> {
           Padding(
             padding: const EdgeInsets.all(16),
             child: TextField(
+              onChanged: _onSearchChanged,
               decoration: InputDecoration(
                 hintText: '채팅 검색...',
                 prefixIcon: const Icon(Icons.search, color: AppTheme.grey),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        onPressed: () {
+                          setState(() {
+                            _searchQuery = '';
+                          });
+                          _filterChats();
+                        },
+                        icon: const Icon(Icons.clear, color: AppTheme.grey),
+                      )
+                    : null,
                 filled: true,
                 fillColor: AppTheme.secondaryBlack,
                 border: OutlineInputBorder(
@@ -104,14 +397,67 @@ class _ChatTabState extends State<ChatTab> {
             ),
           ),
           
+          // 필터 칩
+          if (_selectedFilter != '전체')
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  Chip(
+                    label: Text(_selectedFilter),
+                    backgroundColor: AppTheme.accentPink,
+                    labelStyle: const TextStyle(color: AppTheme.white),
+                    deleteIcon: const Icon(Icons.close, color: AppTheme.white),
+                    onDeleted: () => _onFilterChanged('전체'),
+                  ),
+                ],
+              ),
+            ),
+          
           // 채팅 목록
           Expanded(
-            child: ListView.builder(
-              itemCount: _chatList.length,
-              itemBuilder: (context, index) {
-                final chat = _chatList[index];
-                return _buildChatItem(context, chat);
-              },
+            child: _filteredChatList.isEmpty
+                ? _buildEmptyState()
+                : ListView.builder(
+                    itemCount: _filteredChatList.length,
+                    itemBuilder: (context, index) {
+                      final chat = _filteredChatList[index];
+                      return _buildChatItem(context, chat);
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 빈 상태 위젯
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.chat_bubble_outline,
+            size: 64,
+            color: AppTheme.grey.withValues(alpha: 0.5),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            _searchQuery.isNotEmpty ? '검색 결과가 없습니다' : '채팅이 없습니다',
+            style: TextStyle(
+              color: AppTheme.grey.withValues(alpha: 0.7),
+              fontSize: 16,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _searchQuery.isNotEmpty 
+                ? '다른 검색어를 시도해보세요'
+                : '새로운 음악인들과 연결해보세요!',
+            style: TextStyle(
+              color: AppTheme.grey.withValues(alpha: 0.5),
+              fontSize: 14,
             ),
           ),
         ],
@@ -127,7 +473,9 @@ class _ChatTabState extends State<ChatTab> {
             onTap: () => _showUserProfile(chat['userName']),
             child: CircleAvatar(
               radius: 25,
-              backgroundColor: AppTheme.accentPink,
+              backgroundColor: chat['pinned'] 
+                  ? AppTheme.accentPink 
+                  : AppTheme.secondaryBlack,
               child: Text(
                 chat['userAvatar'],
                 style: const TextStyle(fontSize: 20),
@@ -149,40 +497,82 @@ class _ChatTabState extends State<ChatTab> {
                 ),
               ),
             ),
+          // 고정 표시
+          if (chat['pinned'])
+            Positioned(
+              top: 0,
+              right: 0,
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                decoration: const BoxDecoration(
+                  color: AppTheme.accentPink,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.push_pin,
+                  size: 8,
+                  color: AppTheme.white,
+                ),
+              ),
+            ),
         ],
       ),
       title: Row(
         children: [
-          GestureDetector(
-            onTap: () => _showUserProfile(chat['userName']),
-            child: Text(
-              chat['userName'],
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
+          Expanded(
+            child: GestureDetector(
+              onTap: () => _showUserProfile(chat['userName']),
+              child: Text(
+                chat['userName'],
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: chat['muted'] 
+                      ? AppTheme.grey.withValues(alpha: 0.7)
+                      : AppTheme.white,
+                ),
               ),
             ),
           ),
           const SizedBox(width: 8),
           if (chat['lastMessageType'] == 'media')
             const Icon(Icons.attach_file, size: 16, color: AppTheme.grey),
+          if (chat['muted'])
+            const Icon(Icons.volume_off, size: 16, color: AppTheme.grey),
         ],
       ),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            chat['lastMessage'],
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: AppTheme.grey,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+          Row(
+            children: [
+              if (chat['isTyping'])
+                const Text(
+                  '입력 중...',
+                  style: TextStyle(
+                    color: AppTheme.accentPink,
+                    fontStyle: FontStyle.italic,
+                  ),
+                )
+              else
+                Expanded(
+                  child: Text(
+                    chat['lastMessage'],
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: chat['muted'] 
+                          ? AppTheme.grey.withValues(alpha: 0.7)
+                          : AppTheme.grey,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 4),
           Text(
             chat['timestamp'],
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: AppTheme.grey,
+              color: AppTheme.grey.withValues(alpha: 0.7),
             ),
           ),
         ],
@@ -205,6 +595,11 @@ class _ChatTabState extends State<ChatTab> {
             )
           : null,
       onTap: () {
+        // 읽음 처리
+        setState(() {
+          chat['unreadCount'] = 0;
+        });
+        
         Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => ChatRoomScreen(
@@ -214,6 +609,89 @@ class _ChatTabState extends State<ChatTab> {
           ),
         );
       },
+      onLongPress: () => _showChatOptions(chat),
+    );
+  }
+
+  /// 새 메시지 모달
+  void _showNewMessageModal() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.secondaryBlack,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '새 메시지',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                color: AppTheme.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 20),
+            
+            // 검색 필드
+            TextField(
+              decoration: const InputDecoration(
+                labelText: '사용자 검색',
+                labelStyle: TextStyle(color: AppTheme.grey),
+                prefixIcon: Icon(Icons.search, color: AppTheme.grey),
+                filled: true,
+                fillColor: AppTheme.primaryBlack,
+              ),
+              style: const TextStyle(color: AppTheme.white),
+            ),
+            const SizedBox(height: 20),
+            
+            // 추천 사용자 목록
+            const Text(
+              '최근 연락처',
+              style: TextStyle(
+                color: AppTheme.grey,
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            
+            // 시뮬레이션된 최근 연락처
+            SizedBox(
+              height: 80,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: 5,
+                itemBuilder: (context, index) {
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: Column(
+                      children: [
+                        CircleAvatar(
+                          radius: 25,
+                          backgroundColor: AppTheme.accentPink,
+                          child: Text('👤', style: const TextStyle(fontSize: 16)),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '사용자${index + 1}',
+                          style: const TextStyle(
+                            color: AppTheme.white,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

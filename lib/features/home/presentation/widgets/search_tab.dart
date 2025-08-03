@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
 import 'package:jamjamapp/core/services/search_service.dart';
-import 'package:jamjamapp/core/utils/search_utils.dart';
 import 'user_profile_screen.dart';
 import 'dart:async';
 
