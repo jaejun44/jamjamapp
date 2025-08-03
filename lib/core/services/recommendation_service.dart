@@ -2,268 +2,196 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math';
 
 class RecommendationService {
-  static final RecommendationService _instance = RecommendationService._internal();
-  factory RecommendationService() => _instance;
+  static RecommendationService? _instance;
+  static RecommendationService get instance => _instance ??= RecommendationService._internal();
+  
   RecommendationService._internal();
 
   // 사용자 선호도 데이터
-  Map<String, double> _userPreferences = {};
-  List<String> _userInterests = [];
-  List<String> _userGenres = [];
-  List<String> _userInstruments = [];
-  
+  final Map<String, dynamic> _userPreferences = {
+    'genres': ['jazz', 'pop', 'rock'],
+    'instruments': ['guitar', 'piano'],
+    'activity_level': 'high',
+  };
+
   // 추천 알고리즘 가중치
-  static const double _genreWeight = 0.4;
-  static const double _interestWeight = 0.3;
-  static const double _instrumentWeight = 0.2;
-  static const double _popularityWeight = 0.1;
+  final Map<String, double> _weights = {
+    'genre_match': 0.4,
+    'instrument_match': 0.3,
+    'activity_match': 0.2,
+    'location_match': 0.1,
+  };
 
-  /// 사용자 선호도 초기화
-  Future<void> initializeUserPreferences() async {
-    final prefs = await SharedPreferences.getInstance();
+  /// 사용자 선호도 업데이트
+  Future<void> updateUserPreferences(Map<String, dynamic> preferences) async {
+    _userPreferences.addAll(preferences);
     
-    // 저장된 선호도 로드
-    _userGenres = prefs.getStringList('user_genres') ?? ['팝', '재즈'];
-    _userInstruments = prefs.getStringList('user_instruments') ?? ['기타', '피아노'];
-    _userInterests = prefs.getStringList('user_interests') ?? ['음악', '연주'];
-    
-    // 선호도 점수 계산
-    _calculatePreferences();
+    // TODO: 실제 데이터베이스에 저장
+    await Future.delayed(const Duration(milliseconds: 100));
   }
 
-  /// 선호도 점수 계산
-  void _calculatePreferences() {
-    _userPreferences.clear();
-    
-    // 장르별 선호도
-    for (String genre in _userGenres) {
-      _userPreferences[genre] = (_userPreferences[genre] ?? 0) + _genreWeight;
-    }
-    
-    // 관심사별 선호도
-    for (String interest in _userInterests) {
-      _userPreferences[interest] = (_userPreferences[interest] ?? 0) + _interestWeight;
-    }
-    
-    // 악기별 선호도
-    for (String instrument in _userInstruments) {
-      _userPreferences[instrument] = (_userPreferences[instrument] ?? 0) + _instrumentWeight;
-    }
-  }
-
-  /// 사용자 행동 기록 (좋아요, 저장, 팔로우 등)
-  Future<void> recordUserAction(String action, Map<String, dynamic> feed) async {
-    final prefs = await SharedPreferences.getInstance();
-    
-    switch (action) {
-      case 'like':
-        _updatePreferenceForFeed(feed, 0.1);
-        break;
-      case 'save':
-        _updatePreferenceForFeed(feed, 0.2);
-        break;
-      case 'follow':
-        _updatePreferenceForFeed(feed, 0.3);
-        break;
-      case 'share':
-        _updatePreferenceForFeed(feed, 0.15);
-        break;
-      case 'comment':
-        _updatePreferenceForFeed(feed, 0.25);
-        break;
-    }
-    
-    // 선호도 저장
-    await _savePreferences();
-  }
-
-  /// 피드 기반 선호도 업데이트
-  void _updatePreferenceForFeed(Map<String, dynamic> feed, double weight) {
-    // 장르 선호도 업데이트
-    if (feed['genre'] != null) {
-      _userPreferences[feed['genre']] = (_userPreferences[feed['genre']] ?? 0) + weight;
-    }
-    
-    // 태그 기반 선호도 업데이트
-    if (feed['tags'] != null) {
-      for (String tag in feed['tags']) {
-        _userPreferences[tag] = (_userPreferences[tag] ?? 0) + weight * 0.5;
-      }
-    }
-    
-    // 악기 선호도 업데이트 (태그에서 악기 추출)
-    if (feed['tags'] != null) {
-      for (String tag in feed['tags']) {
-        if (_isInstrument(tag)) {
-          _userPreferences[tag] = (_userPreferences[tag] ?? 0) + weight * 0.3;
-        }
-      }
-    }
-  }
-
-  /// 악기 여부 확인
-  bool _isInstrument(String tag) {
-    final instruments = [
-      '기타', '피아노', '드럼', '베이스', '바이올린', '첼로', '색소폰',
-      '트럼펫', '플루트', '클라리넷', '하모니카', '우쿨렐레', '만돌린'
-    ];
-    return instruments.contains(tag);
-  }
-
-  /// 선호도 저장
-  Future<void> _savePreferences() async {
-    final prefs = await SharedPreferences.getInstance();
-    
-    // 선호도가 높은 항목들을 저장
-    final sortedPreferences = _userPreferences.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    
-    final topGenres = <String>[];
-    final topInstruments = <String>[];
-    final topInterests = <String>[];
-    
-    for (var entry in sortedPreferences.take(10)) {
-      if (_isInstrument(entry.key)) {
-        topInstruments.add(entry.key);
-      } else if (_isGenre(entry.key)) {
-        topGenres.add(entry.key);
-      } else {
-        topInterests.add(entry.key);
-      }
-    }
-    
-    await prefs.setStringList('user_genres', topGenres);
-    await prefs.setStringList('user_instruments', topInstruments);
-    await prefs.setStringList('user_interests', topInterests);
-  }
-
-  /// 장르 여부 확인
-  bool _isGenre(String tag) {
-    final genres = [
-      '팝', '재즈', '락', '클래식', '일렉트로닉', '힙합', 'R&B', '컨트리',
-      '블루스', '펑크', '메탈', '포크', '소울', '레게', '디스코'
-    ];
-    return genres.contains(tag);
-  }
-
-  /// 개인화된 피드 추천
-  List<Map<String, dynamic>> getPersonalizedFeeds(List<Map<String, dynamic>> allFeeds) {
-    if (_userPreferences.isEmpty) {
-      return allFeeds; // 선호도가 없으면 전체 피드 반환
-    }
-
-    // 각 피드에 점수 계산
-    final scoredFeeds = allFeeds.map((feed) {
-      double score = _calculateFeedScore(feed);
-      return {
-        'feed': feed,
-        'score': score,
-      };
-    }).toList();
-
-    // 점수순으로 정렬
-    scoredFeeds.sort((a, b) => (b['score'] as double).compareTo(a['score'] as double));
-
-    // 상위 70%는 개인화, 하위 30%는 다양성을 위해 랜덤 선택
-    final personalizedCount = (scoredFeeds.length * 0.7).round();
-    final personalized = scoredFeeds.take(personalizedCount).map((item) => item['feed'] as Map<String, dynamic>).toList();
-    
-    final remaining = scoredFeeds.skip(personalizedCount).map((item) => item['feed'] as Map<String, dynamic>).toList();
-    remaining.shuffle();
-    
-    final diverse = remaining.take((scoredFeeds.length * 0.3).round()).toList();
-    
-    return [...personalized, ...diverse];
-  }
-
-  /// 피드 점수 계산
-  double _calculateFeedScore(Map<String, dynamic> feed) {
+  /// 추천 점수 계산
+  double _calculateRecommendationScore(Map<String, dynamic> user, Map<String, dynamic> target) {
     double score = 0.0;
     
-    // 장르 점수
-    if (feed['genre'] != null) {
-      score += (_userPreferences[feed['genre']] ?? 0) * _genreWeight;
-    }
+    // 장르 매칭 점수
+    final userGenres = List<String>.from(user['genres'] ?? []);
+    final targetGenres = List<String>.from(target['genres'] ?? []);
+    final genreMatch = _calculateListSimilarity(userGenres, targetGenres);
+    score += genreMatch * _weights['genre_match']!;
     
-    // 태그 점수
-    if (feed['tags'] != null) {
-      for (String tag in feed['tags']) {
-        score += (_userPreferences[tag] ?? 0) * _interestWeight;
-      }
-    }
+    // 악기 매칭 점수
+    final userInstruments = List<String>.from(user['instruments'] ?? []);
+    final targetInstruments = List<String>.from(target['instruments'] ?? []);
+    final instrumentMatch = _calculateListSimilarity(userInstruments, targetInstruments);
+    score += instrumentMatch * _weights['instrument_match']!;
     
-    // 인기도 점수 (좋아요, 댓글 수 기반)
-    final likes = feed['likes'] ?? 0;
-    final comments = feed['comments'] ?? 0;
-    final popularityScore = (likes + comments * 2) / 100.0; // 정규화
-    score += popularityScore * _popularityWeight;
+    // 활동 수준 매칭
+    final userActivity = user['activity_level'] ?? 'medium';
+    final targetActivity = target['activity_level'] ?? 'medium';
+    final activityMatch = userActivity == targetActivity ? 1.0 : 0.5;
+    score += activityMatch * _weights['activity_match']!;
     
-    // 시간 가중치 (최신 피드에 더 높은 점수)
-    final hoursAgo = _getHoursAgo(feed['timestamp'] ?? '1시간 전');
-    final timeWeight = max(0.1, 1.0 - hoursAgo / 24.0); // 24시간 내 피드에 가중치
-    score *= timeWeight;
+    // 위치 매칭 (간단한 구현)
+    final userLocation = user['location'] ?? '';
+    final targetLocation = target['location'] ?? '';
+    final locationMatch = userLocation == targetLocation ? 1.0 : 0.0;
+    score += locationMatch * _weights['location_match']!;
     
     return score;
   }
 
-  /// 시간 차이 계산 (시간 단위)
-  int _getHoursAgo(String timestamp) {
-    if (timestamp.contains('방금 전')) return 0;
-    if (timestamp.contains('분 전')) {
-      final minutes = int.tryParse(timestamp.replaceAll('분 전', '')) ?? 0;
-      return minutes ~/ 60;
-    }
-    if (timestamp.contains('시간 전')) {
-      return int.tryParse(timestamp.replaceAll('시간 전', '')) ?? 1;
-    }
-    if (timestamp.contains('일 전')) {
-      final days = int.tryParse(timestamp.replaceAll('일 전', '')) ?? 1;
-      return days * 24;
-    }
-    return 24; // 기본값
+  /// 리스트 유사도 계산
+  double _calculateListSimilarity(List<String> list1, List<String> list2) {
+    if (list1.isEmpty && list2.isEmpty) return 1.0;
+    if (list1.isEmpty || list2.isEmpty) return 0.0;
+    
+    final intersection = list1.where((item) => list2.contains(item)).length;
+    final union = list1.length + list2.length - intersection;
+    
+    return union > 0 ? intersection / union : 0.0;
   }
 
-  /// 추천 이유 생성
-  String getRecommendationReason(Map<String, dynamic> feed) {
-    final reasons = <String>[];
+  /// 추천 사용자 목록 생성
+  Future<List<Map<String, dynamic>>> getRecommendedUsers({
+    required String currentUserId,
+    int limit = 10,
+  }) async {
+    // TODO: 실제 데이터베이스에서 사용자 목록 가져오기
+    final allUsers = [
+      {
+        'id': 'user1',
+        'name': 'JazzMaster',
+        'genres': ['jazz', 'blues'],
+        'instruments': ['saxophone', 'piano'],
+        'activity_level': 'high',
+        'location': 'Seoul',
+      },
+      {
+        'id': 'user2',
+        'name': 'PopLover',
+        'genres': ['pop', 'rock'],
+        'instruments': ['guitar', 'vocals'],
+        'activity_level': 'medium',
+        'location': 'Busan',
+      },
+      {
+        'id': 'user3',
+        'name': 'ClassicalFan',
+        'genres': ['classical', 'jazz'],
+        'instruments': ['violin', 'piano'],
+        'activity_level': 'low',
+        'location': 'Seoul',
+      },
+    ];
     
-    if (feed['genre'] != null && _userPreferences[feed['genre']] != null) {
-      reasons.add('${feed['genre']} 장르를 좋아하시네요');
-    }
-    
-    if (feed['tags'] != null) {
-      for (String tag in feed['tags']) {
-        if (_userPreferences[tag] != null && _userPreferences[tag]! > 0.3) {
-          reasons.add('$tag에 관심이 많으시네요');
-          break;
-        }
-      }
-    }
-    
-    if (reasons.isEmpty) {
-      reasons.add('새로운 음악을 발견해보세요');
-    }
-    
-    return reasons.first;
-  }
-
-  /// 사용자 선호도 분석 결과
-  Map<String, dynamic> getUserPreferenceAnalysis() {
-    final sortedPreferences = _userPreferences.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    
-    return {
-      'topGenres': sortedPreferences.where((e) => _isGenre(e.key)).take(3).map((e) => e.key).toList(),
-      'topInstruments': sortedPreferences.where((e) => _isInstrument(e.key)).take(3).map((e) => e.key).toList(),
-      'topInterests': sortedPreferences.where((e) => !_isGenre(e.key) && !_isInstrument(e.key)).take(3).map((e) => e.key).toList(),
-      'totalPreferences': _userPreferences.length,
+    // 현재 사용자 정보 (실제로는 데이터베이스에서 가져와야 함)
+    final currentUser = {
+      'id': currentUserId,
+      'genres': _userPreferences['genres'],
+      'instruments': _userPreferences['instruments'],
+      'activity_level': _userPreferences['activity_level'],
+      'location': 'Seoul',
     };
+    
+    // 추천 점수 계산 및 정렬
+    final recommendations = allUsers
+        .where((user) => user['id'] != currentUserId)
+        .map((user) {
+          final score = _calculateRecommendationScore(currentUser, user);
+          return {
+            ...user,
+            'recommendation_score': score,
+          };
+        })
+        .toList();
+    
+    recommendations.sort((a, b) => 
+        (b['recommendation_score'] as double).compareTo(a['recommendation_score'] as double));
+    
+    return recommendations.take(limit).toList();
   }
 
-  /// 추천 정확도 개선을 위한 피드백
-  Future<void> provideFeedback(String feedId, String action, bool isPositive) async {
-    // 사용자 피드백을 기반으로 추천 알고리즘 개선
-    // 실제 구현에서는 더 정교한 피드백 시스템 필요
-    print('피드백 기록: $feedId, $action, $isPositive');
+  /// 추천 콘텐츠 생성
+  Future<List<Map<String, dynamic>>> getRecommendedContent({
+    required String userId,
+    int limit = 10,
+  }) async {
+    // TODO: 실제 콘텐츠 추천 알고리즘 구현
+    final recommendedUsers = await getRecommendedUsers(currentUserId: userId, limit: 5);
+    
+    final recommendedContent = <Map<String, dynamic>>[];
+    
+    for (final user in recommendedUsers) {
+      // 해당 사용자의 최근 콘텐츠 가져오기 (시뮬레이션)
+      final userContent = [
+        {
+          'id': 'content_${user['id']}_1',
+          'title': '${user['name']}의 새로운 곡',
+          'type': 'music',
+          'author_id': user['id'],
+          'author_name': user['name'],
+          'created_at': DateTime.now().subtract(const Duration(hours: 2)).toIso8601String(),
+        },
+        {
+          'id': 'content_${user['id']}_2',
+          'title': '${user['name']}의 Jam 세션',
+          'type': 'jam_session',
+          'author_id': user['id'],
+          'author_name': user['name'],
+          'created_at': DateTime.now().subtract(const Duration(hours: 5)).toIso8601String(),
+        },
+      ];
+      
+      recommendedContent.addAll(userContent);
+    }
+    
+    // 최신순으로 정렬
+    recommendedContent.sort((a, b) => 
+        DateTime.parse(b['created_at']).compareTo(DateTime.parse(a['created_at'])));
+    
+    return recommendedContent.take(limit).toList();
+  }
+
+  /// 개인화된 피드 생성
+  Future<List<Map<String, dynamic>>> getPersonalizedFeed({
+    required String userId,
+    int limit = 20,
+  }) async {
+    final recommendedContent = await getRecommendedContent(userId: userId, limit: limit);
+    
+    // TODO: 실제 피드 데이터와 혼합
+    final personalizedFeed = <Map<String, dynamic>>[];
+    
+    // 추천 콘텐츠 추가
+    for (final content in recommendedContent) {
+      personalizedFeed.add({
+        ...content,
+        'is_recommended': true,
+        'recommendation_reason': '사용자 선호도 기반 추천',
+      });
+    }
+    
+    return personalizedFeed;
   }
 } 

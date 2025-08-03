@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'dart:typed_data'; // Added for Uint8List
 
 class SupabaseService {
   static SupabaseService? _instance;
@@ -180,15 +181,26 @@ class SupabaseService {
   /// 파일 업로드
   Future<String> uploadFile({
     required String bucketName,
-    required String filePath,
+    required Uint8List fileBytes,
     required String fileName,
   }) async {
-    final response = await _client.storage
+    await _client.storage
         .from(bucketName)
-        .upload(fileName, filePath);
+        .uploadBinary(fileName, fileBytes);
     
     return _client.storage
         .from(bucketName)
         .getPublicUrl(fileName);
+  }
+
+  /// 파일 경로로 업로드 (웹 환경용)
+  Future<String> uploadFileFromPath({
+    required String bucketName,
+    required String filePath,
+    required String fileName,
+  }) async {
+    // 웹 환경에서는 파일 경로 대신 파일 객체를 사용해야 함
+    // 이 메서드는 나중에 구현 예정
+    throw UnimplementedError('uploadFileFromPath는 아직 구현되지 않았습니다. uploadFile을 사용하세요.');
   }
 } 

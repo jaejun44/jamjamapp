@@ -24,6 +24,12 @@ CREATE POLICY "Users can insert their own profile" ON profiles
 CREATE POLICY "Users can update their own profile" ON profiles
   FOR UPDATE USING (auth.uid() = id);
 
+-- Create indexes for better performance
+CREATE INDEX IF NOT EXISTS profiles_username_idx ON profiles(username);
+CREATE INDEX IF NOT EXISTS profiles_nickname_idx ON profiles(nickname);
+CREATE INDEX IF NOT EXISTS profiles_location_idx ON profiles(location);
+CREATE INDEX IF NOT EXISTS profiles_created_at_idx ON profiles(created_at DESC);
+
 -- Create function to handle new user signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
