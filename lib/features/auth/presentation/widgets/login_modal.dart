@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
 import 'package:jamjamapp/core/services/supabase_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:jamjamapp/core/services/auth_state_manager.dart';
 import 'signup_modal.dart';
 import 'forgot_password_modal.dart';
 
@@ -46,8 +46,12 @@ class _LoginModalState extends State<LoginModal> {
       );
 
       if (response.user != null) {
-        // 로그인 성공 시 자동 로그인 상태 저장
-        await _saveAutoLoginData();
+        // AuthStateManager를 통해 로그인 상태 업데이트
+        await AuthStateManager.instance.updateLoginState(
+          userId: response.user!.id,
+          email: response.user!.email ?? '',
+          nickname: response.user!.userMetadata?['nickname'] as String?,
+        );
 
         if (mounted) {
           Navigator.of(context).pop(true);
@@ -74,33 +78,6 @@ class _LoginModalState extends State<LoginModal> {
           _isLoading = false;
         });
       }
-    }
-  }
-
-  // 자동 로그인 데이터 저장
-  Future<void> _saveAutoLoginData() async {
-    final prefs = await SharedPreferences.getInstance();
-    final user = SupabaseService.instance.currentUser;
-
-    if (user != null) {
-      // 로그인 상태 저장
-      await prefs.setBool('isLoggedIn', true);
-      await prefs.setString('userId', user.id);
-
-      // 사용자 정보 저장
-      final email = user.email ?? '';
-      final userName = email.split('@')[0];
-
-      await prefs.setString('userName', userName);
-      await prefs.setString('userNickname', userName);
-      await prefs.setString('userEmail', email);
-      await prefs.setString('userBio', '음악을 사랑하는 $userName입니다 🎵');
-      await prefs.setString('userInstruments', '기타, 피아노');
-
-      // 로그인 시간 저장
-      await prefs.setString('loginTime', DateTime.now().toIso8601String());
-
-      print('로그인 데이터 저장됨: 사용자=$userName');
     }
   }
 

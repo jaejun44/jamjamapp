@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
+import 'package:jamjamapp/core/services/app_state_manager.dart';
 import 'comment_modal.dart';
 import 'file_upload_modal.dart';
 import 'user_profile_screen.dart';
@@ -12,6 +13,8 @@ import 'report_modal.dart';
 import 'dart:async';
 import 'package:jamjamapp/core/services/recommendation_service.dart';
 import 'package:jamjamapp/core/services/offline_service.dart';
+import 'package:jamjamapp/core/services/auth_state_manager.dart';
+import 'package:jamjamapp/core/services/comment_service.dart';
 
 class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
@@ -21,9 +24,8 @@ class HomeTab extends StatefulWidget {
 }
 
 class _HomeTabState extends State<HomeTab> {
-  // 각 피드의 좋아요/저장 상태를 관리
-  final Map<int, bool> _likedFeeds = {};
-  final Map<int, bool> _savedFeeds = {};
+  // AppStateManager를 통해 상태 관리
+  final AppStateManager _appStateManager = AppStateManager.instance;
   
   // 스크롤 컨트롤러
   final ScrollController _scrollController = ScrollController();
@@ -39,26 +41,50 @@ class _HomeTabState extends State<HomeTab> {
   
   // 실시간 업데이트 상태
   Timer? _realtimeUpdateTimer;
-  bool _isRealtimeUpdateEnabled = true;
   DateTime _lastUpdateTime = DateTime.now();
   
-  // 팔로우 상태 관리
-  final Set<String> _followedUsers = {};
-  
-  // 새로운 기능들을 위한 상태
-  bool _isPersonalizedMode = true;
-  bool _isOfflineMode = false;
-  final RecommendationService _recommendationService = RecommendationService();
+  final RecommendationService _recommendationService = RecommendationService.instance;
   final OfflineService _offlineService = OfflineService();
-  
-  // 필터 상태
-  String _selectedGenre = '전체';
-  String _selectedMediaType = '전체';
-  String _searchQuery = '';
   
   // 필터 옵션
   final List<String> _genres = ['전체', '재즈', '팝', '락', '클래식', '일렉트로닉'];
   final List<String> _mediaTypes = ['전체', '비디오', '오디오', '이미지', '텍스트'];
+
+  // AppStateManager에서 상태를 가져오는 getter 메서드들
+  Map<int, bool> get _likedFeeds => Map<int, bool>.from(_appStateManager.homeState['likedFeeds'] ?? {});
+  Map<int, bool> get _savedFeeds => Map<int, bool>.from(_appStateManager.homeState['savedFeeds'] ?? {});
+  Set<String> get _followedUsers => Set<String>.from(_appStateManager.homeState['followedUsers'] ?? {});
+  bool get _isPersonalizedMode => _appStateManager.homeState['isPersonalizedMode'] ?? true;
+  bool get _isOfflineMode => _appStateManager.homeState['isOfflineMode'] ?? false;
+  bool get _isRealtimeUpdateEnabled => _appStateManager.homeState['isRealtimeUpdateEnabled'] ?? true;
+  String get _selectedGenre => _appStateManager.homeState['selectedGenre'] ?? '전체';
+  String get _selectedMediaType => _appStateManager.homeState['selectedMediaType'] ?? '전체';
+  String get _searchQuery => _appStateManager.homeState['searchQuery'] ?? '';
+
+  // AppStateManager를 통해 상태를 업데이트하는 메서드들
+  Future<void> _updateSearchQuery(String value) async {
+    await _appStateManager.updateValue('home', 'searchQuery', value);
+  }
+
+  Future<void> _updateSelectedGenre(String value) async {
+    await _appStateManager.updateValue('home', 'selectedGenre', value);
+  }
+
+  Future<void> _updateSelectedMediaType(String value) async {
+    await _appStateManager.updateValue('home', 'selectedMediaType', value);
+  }
+
+  Future<void> _updateRealtimeUpdateEnabled(bool value) async {
+    await _appStateManager.updateValue('home', 'isRealtimeUpdateEnabled', value);
+  }
+
+  Future<void> _updatePersonalizedMode(bool value) async {
+    await _appStateManager.updateValue('home', 'isPersonalizedMode', value);
+  }
+
+  Future<void> _updateOfflineMode(bool value) async {
+    await _appStateManager.updateValue('home', 'isOfflineMode', value);
+  }
 
   // 실제 피드 데이터 (확장된 버전)
   List<Map<String, dynamic>> _allFeedData = [
@@ -196,9 +222,35 @@ class _HomeTabState extends State<HomeTab> {
 
   /// 초기 데이터 로드
   void _loadInitialData() {
-    _feedData = _allFeedData.take(_itemsPerPage).toList();
-    _currentPage = 1;
-    _hasMoreData = _allFeedData.length > _itemsPerPage;
+    // AppStateManager에서 저장된 피드 데이터 로드
+    final savedFeedData = AppStateManager.instance.getState('home')['feedData'] as List<Map<String, dynamic>>?;
+    if (savedFeedData != null && savedFeedData.isNotEmpty) {
+      _feedData = savedFeedData;
+      _currentPage = (_feedData.length / _itemsPerPage).ceil();
+      _hasMoreData = _allFeedData.length > _feedData.length;
+    } else {
+      _feedData = _allFeedData.take(_itemsPerPage).toList();
+      _currentPage = 1;
+      _hasMoreData = _allFeedData.length > _itemsPerPage;
+      // AppStateManager에 저장
+      AppStateManager.instance.updateValue('home', 'feedData', _feedData);
+    }
+    
+    // 댓글 수 업데이트
+    _updateAllCommentCounts();
+  }
+
+  /// 모든 피드의 댓글 수 업데이트
+  void _updateAllCommentCounts() {
+    for (final feed in _feedData) {
+      final commentCount = CommentService.instance.getCommentCount(feed['id']);
+      feed['comments'] = commentCount;
+    }
+    
+    for (final feed in _allFeedData) {
+      final commentCount = CommentService.instance.getCommentCount(feed['id']);
+      feed['comments'] = commentCount;
+    }
   }
 
   /// 스크롤 리스너 설정
@@ -232,6 +284,9 @@ class _HomeTabState extends State<HomeTab> {
             _hasMoreData = endIndex < _allFeedData.length;
             _isLoadingMore = false;
           });
+          
+          // AppStateManager에 저장
+          AppStateManager.instance.updateValue('home', 'feedData', _feedData);
         } else {
           setState(() {
             _hasMoreData = false;
@@ -339,11 +394,11 @@ class _HomeTabState extends State<HomeTab> {
           const SizedBox(height: 24),
           
           // 검색바
-          TextField(
-            onChanged: (value) {
-              _searchQuery = value;
-              _filterFeeds();
-            },
+                      TextField(
+              onChanged: (value) async {
+                await _updateSearchQuery(value);
+                _filterFeeds();
+              },
             style: const TextStyle(color: AppTheme.white),
             decoration: InputDecoration(
               hintText: '피드 검색...',
@@ -360,36 +415,30 @@ class _HomeTabState extends State<HomeTab> {
           const SizedBox(height: 24),
           
           // 장르 필터
-          _buildFilterSection('장르', _genres, _selectedGenre, (value) {
-            setState(() {
-              _selectedGenre = value;
-            });
-            _filterFeeds();
-          }),
+                      _buildFilterSection('장르', _genres, _selectedGenre, (value) async {
+              await _updateSelectedGenre(value);
+              _filterFeeds();
+            }),
           const SizedBox(height: 16),
           
           // 미디어 타입 필터
-          _buildFilterSection('미디어 타입', _mediaTypes, _selectedMediaType, (value) {
-            setState(() {
-              _selectedMediaType = value;
-            });
-            _filterFeeds();
-          }),
+                      _buildFilterSection('미디어 타입', _mediaTypes, _selectedMediaType, (value) async {
+              await _updateSelectedMediaType(value);
+              _filterFeeds();
+            }),
           const SizedBox(height: 24),
           
           // 필터 초기화 버튼
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  _selectedGenre = '전체';
-                  _selectedMediaType = '전체';
-                  _searchQuery = '';
-                });
-                _filterFeeds();
-                Navigator.of(context).pop();
-              },
+                              onPressed: () async {
+                  await _updateSelectedGenre('전체');
+                  await _updateSelectedMediaType('전체');
+                  await _updateSearchQuery('');
+                  _filterFeeds();
+                  Navigator.of(context).pop();
+                },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.accentPink,
                 foregroundColor: AppTheme.white,
@@ -496,18 +545,8 @@ class _HomeTabState extends State<HomeTab> {
   }
 
   /// 실시간 업데이트 토글
-  void _toggleRealtimeUpdates() {
-    setState(() {
-      _isRealtimeUpdateEnabled = !_isRealtimeUpdateEnabled;
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(_isRealtimeUpdateEnabled ? '실시간 업데이트 활성화' : '실시간 업데이트 비활성화'),
-        backgroundColor: AppTheme.accentPink,
-        duration: const Duration(seconds: 2),
-      ),
-    );
+  Future<void> _toggleRealtimeUpdates() async {
+    await _updateRealtimeUpdateEnabled(!_isRealtimeUpdateEnabled);
   }
 
   /// 필터 섹션 빌드
@@ -545,19 +584,37 @@ class _HomeTabState extends State<HomeTab> {
 
   // 좋아요 상태 토글
   void _toggleLike(int index) {
-    setState(() {
-      _likedFeeds[index] = !(_likedFeeds[index] ?? false);
-    });
+    // 로그인 상태 확인
+    if (AuthStateManager.instance.requiresLogin) {
+      AuthStateManager.instance.showLoginRequiredMessage(context);
+      return;
+    }
 
     final feed = _feedData[index];
-    final isLiked = _likedFeeds[index] ?? false;
+    final currentLikedState = _likedFeeds[index] ?? false;
+    final newLikedState = !currentLikedState;
+    
+    // AppStateManager를 통해 상태 업데이트
+    _appStateManager.updateValue('home', 'likedFeeds', {
+      ..._likedFeeds,
+      index: newLikedState,
+    });
+    
+    // 피드 데이터의 좋아요 카운트 업데이트
+    setState(() {
+      if (newLikedState) {
+        feed['likes'] = (feed['likes'] as int) + 1;
+      } else {
+        feed['likes'] = (feed['likes'] as int) - 1;
+      }
+    });
     
     // 사용자 행동 기록
-    _recordUserAction(isLiked ? 'like' : 'unlike', feed);
+    _recordUserAction(newLikedState ? 'like' : 'unlike', feed);
     
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(isLiked ? '좋아요를 눌렀습니다!' : '좋아요를 취소했습니다.'),
+        content: Text(newLikedState ? '좋아요를 눌렀습니다!' : '좋아요를 취소했습니다.'),
         backgroundColor: AppTheme.accentPink,
         duration: const Duration(seconds: 1),
       ),
@@ -566,28 +623,48 @@ class _HomeTabState extends State<HomeTab> {
 
   // 저장 상태 토글
   void _toggleSave(int index) {
+    // 로그인 상태 확인
+    if (AuthStateManager.instance.requiresLogin) {
+      AuthStateManager.instance.showLoginRequiredMessage(context);
+      return;
+    }
+
+    final currentSavedState = _savedFeeds[index] ?? false;
+    final newSavedState = !currentSavedState;
+    
+    // AppStateManager를 통해 상태 업데이트
+    _appStateManager.updateValue('home', 'savedFeeds', {
+      ..._savedFeeds,
+      index: newSavedState,
+    });
+    
+    // UI 업데이트를 위한 setState 호출
     setState(() {
-      _savedFeeds[index] = !(_savedFeeds[index] ?? false);
+      // 상태 변경을 UI에 반영
     });
     
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(_savedFeeds[index]! ? '저장됨' : '저장 취소'),
+        content: Text(newSavedState ? '저장됨' : '저장 취소'),
         backgroundColor: AppTheme.accentPink,
         duration: const Duration(seconds: 1),
       ),
     );
   }
 
-  // 새로운 피드 추가
+  /// 새 피드 추가
   void _addNewFeed(Map<String, dynamic> newFeed) {
     setState(() {
       _feedData.insert(0, newFeed);
+      _allFeedData.insert(0, newFeed);
     });
+    
+    // AppStateManager에 저장
+    AppStateManager.instance.updateValue('home', 'feedData', _feedData);
     
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('피드가 추가되었습니다!'),
+        content: Text('새 피드가 추가되었습니다!'),
         backgroundColor: AppTheme.accentPink,
         duration: Duration(seconds: 2),
       ),
@@ -716,6 +793,12 @@ class _HomeTabState extends State<HomeTab> {
 
   // 파일 업로드 모달 표시
   void _showFileUploadModal(String uploadType) {
+    // 로그인 상태 확인
+    if (AuthStateManager.instance.requiresLogin) {
+      AuthStateManager.instance.showLoginRequiredMessage(context);
+      return;
+    }
+
     Navigator.of(context).pop(); // 피드 추가 모달 닫기
     
     showDialog(
@@ -725,7 +808,7 @@ class _HomeTabState extends State<HomeTab> {
         onUploadComplete: (title, content, mediaData) {
           _addNewFeed({
             'id': DateTime.now().millisecondsSinceEpoch,
-            'author': '나',
+            'author': AuthStateManager.instance.userName,
             'authorAvatar': '👤',
             'title': title,
             'content': content,
@@ -736,6 +819,7 @@ class _HomeTabState extends State<HomeTab> {
             'timestamp': '방금 전',
             'mediaType': uploadType,
             'mediaData': mediaData,
+            'mediaUrl': null, // 실제 URL은 백엔드에서 처리
           });
         },
       ),
@@ -988,10 +1072,17 @@ class _HomeTabState extends State<HomeTab> {
                   child: CircleAvatar(
                     radius: 20,
                     backgroundColor: AppTheme.accentPink,
-                    child: Text(
-                      feed['authorAvatar'],
-                      style: const TextStyle(fontSize: 16),
-                    ),
+                    backgroundImage: feed['author'] == AuthStateManager.instance.userName && 
+                                    AuthStateManager.instance.profileImageBytes != null
+                        ? MemoryImage(AuthStateManager.instance.profileImageBytes!)
+                        : null,
+                    child: feed['author'] == AuthStateManager.instance.userName && 
+                           AuthStateManager.instance.profileImageBytes != null
+                        ? null
+                        : Text(
+                            feed['authorAvatar'],
+                            style: const TextStyle(fontSize: 16),
+                          ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -1172,7 +1263,23 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  // 댓글 모달 표시
+  /// 댓글 수 업데이트
+  void _updateCommentCount(int feedId) {
+    setState(() {
+      final commentCount = CommentService.instance.getCommentCount(feedId);
+      final feedIndex = _feedData.indexWhere((feed) => feed['id'] == feedId);
+      if (feedIndex != -1) {
+        _feedData[feedIndex]['comments'] = commentCount;
+      }
+      
+      final allFeedIndex = _allFeedData.indexWhere((feed) => feed['id'] == feedId);
+      if (allFeedIndex != -1) {
+        _allFeedData[allFeedIndex]['comments'] = commentCount;
+      }
+    });
+  }
+
+  /// 댓글 모달 표시
   void _showCommentModal(Map<String, dynamic> feed) {
     showModalBottomSheet(
       context: context,
@@ -1181,8 +1288,11 @@ class _HomeTabState extends State<HomeTab> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => CommentModal(feedIndex: _feedData.indexOf(feed)),
-    );
+      builder: (context) => CommentModal(feedId: feed['id'], feedTitle: feed['title']),
+    ).then((_) {
+      // 모달이 닫힌 후 댓글 수 업데이트
+      _updateCommentCount(feed['id']);
+    });
   }
 
   /// 피드 옵션 모달 표시
@@ -1226,6 +1336,12 @@ class _HomeTabState extends State<HomeTab> {
 
   /// 공유 모달 표시
   void _showShareModal(Map<String, dynamic> feed) {
+    // 로그인 상태 확인
+    if (AuthStateManager.instance.requiresLogin) {
+      AuthStateManager.instance.showLoginRequiredMessage(context);
+      return;
+    }
+
     showModalBottomSheet(
       context: context,
       backgroundColor: AppTheme.secondaryBlack,
@@ -1249,57 +1365,36 @@ class _HomeTabState extends State<HomeTab> {
   }
 
   /// 개인화 모드 토글
-  void _togglePersonalizedMode() {
-    setState(() {
-      _isPersonalizedMode = !_isPersonalizedMode;
-    });
-
-    if (_isPersonalizedMode) {
-      _applyPersonalizedRecommendations();
-    } else {
-      _loadInitialData(); // 원래 데이터로 복원
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(_isPersonalizedMode ? '개인화 추천 모드 활성화' : '전체 피드 모드 활성화'),
-        backgroundColor: AppTheme.accentPink,
-        duration: const Duration(seconds: 2),
-      ),
-    );
+  Future<void> _togglePersonalizedMode() async {
+    await _updatePersonalizedMode(!_isPersonalizedMode);
   }
 
   /// 개인화 추천 적용
-  void _applyPersonalizedRecommendations() {
-    final personalizedFeeds = _recommendationService.getPersonalizedFeeds(_allFeedData);
-    setState(() {
-      _feedData = personalizedFeeds.take(_itemsPerPage).toList();
-      _currentPage = 1;
-      _hasMoreData = personalizedFeeds.length > _itemsPerPage;
-    });
+  Future<void> _applyPersonalizedRecommendations() async {
+    try {
+      final personalizedFeeds = await _recommendationService.getPersonalizedFeed(
+        userId: 'current-user-id', // TODO: 실제 사용자 ID로 변경
+        limit: _itemsPerPage,
+      );
+      
+      setState(() {
+        _feedData = personalizedFeeds.take(_itemsPerPage).toList();
+        _currentPage = 1;
+        _hasMoreData = personalizedFeeds.length > _itemsPerPage;
+      });
+    } catch (e) {
+      // 오류 발생 시 기본 피드 사용
+      setState(() {
+        _feedData = _allFeedData.take(_itemsPerPage).toList();
+        _currentPage = 1;
+        _hasMoreData = _allFeedData.length > _itemsPerPage;
+      });
+    }
   }
 
   /// 오프라인 모드 토글
-  void _toggleOfflineMode() {
-    setState(() {
-      _isOfflineMode = !_isOfflineMode;
-    });
-
-    _offlineService.setOfflineMode(_isOfflineMode);
-
-    if (_isOfflineMode) {
-      _loadOfflineData();
-    } else {
-      _loadInitialData();
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(_isOfflineMode ? '오프라인 모드 활성화' : '온라인 모드 활성화'),
-        backgroundColor: AppTheme.accentPink,
-        duration: const Duration(seconds: 2),
-      ),
-    );
+  Future<void> _toggleOfflineMode() async {
+    await _updateOfflineMode(!_isOfflineMode);
   }
 
   /// 오프라인 데이터 로드
@@ -1341,8 +1436,14 @@ class _HomeTabState extends State<HomeTab> {
   }
 
   /// 사용자 행동 기록 (추천 시스템용)
-  void _recordUserAction(String action, Map<String, dynamic> feed) {
-    _recommendationService.recordUserAction(action, feed);
+  Future<void> _recordUserAction(String action, Map<String, dynamic> feed) async {
+    try {
+      // TODO: 실제 사용자 행동 기록 구현
+      // 현재는 추천 서비스가 업데이트되지 않았으므로 주석 처리
+      // await _recommendationService.recordUserAction(action, feed);
+    } catch (e) {
+      // 오류 무시 (개발 중)
+    }
   }
 
   // 사용자 프로필로 이동

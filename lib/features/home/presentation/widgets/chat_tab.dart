@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
+import 'package:jamjamapp/core/services/auth_state_manager.dart';
 import '../../../chat/presentation/screens/chat_room_screen.dart';
 import 'user_profile_screen.dart';
 import 'dart:async';
@@ -422,7 +423,7 @@ class _ChatTabState extends State<ChatTab> {
                     itemCount: _filteredChatList.length,
                     itemBuilder: (context, index) {
                       final chat = _filteredChatList[index];
-                      return _buildChatItem(context, chat);
+                      return _buildChatItem(chat);
                     },
                   ),
           ),
@@ -465,137 +466,77 @@ class _ChatTabState extends State<ChatTab> {
     );
   }
 
-  Widget _buildChatItem(BuildContext context, Map<String, dynamic> chat) {
+  /// 채팅방 진입
+  Widget _buildChatItem(Map<String, dynamic> chat) {
     return ListTile(
-      leading: Stack(
-        children: [
-          GestureDetector(
-            onTap: () => _showUserProfile(chat['userName']),
-            child: CircleAvatar(
-              radius: 25,
-              backgroundColor: chat['pinned'] 
-                  ? AppTheme.accentPink 
-                  : AppTheme.secondaryBlack,
-              child: Text(
-                chat['userAvatar'],
-                style: const TextStyle(fontSize: 20),
-              ),
-            ),
-          ),
-          // 온라인 상태 표시
-          if (chat['isOnline'])
-            Positioned(
-              right: 0,
-              bottom: 0,
-              child: Container(
-                width: 12,
-                height: 12,
-                decoration: BoxDecoration(
-                  color: Colors.green,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppTheme.primaryBlack, width: 2),
-                ),
-              ),
-            ),
-          // 고정 표시
-          if (chat['pinned'])
-            Positioned(
-              top: 0,
-              right: 0,
-              child: Container(
-                padding: const EdgeInsets.all(2),
-                decoration: const BoxDecoration(
-                  color: AppTheme.accentPink,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.push_pin,
-                  size: 8,
-                  color: AppTheme.white,
-                ),
-              ),
-            ),
-        ],
+      leading: CircleAvatar(
+        backgroundColor: AppTheme.accentPink,
+        child: Text(
+          chat['userAvatar'],
+          style: const TextStyle(fontSize: 16),
+        ),
       ),
       title: Row(
         children: [
-          Expanded(
-            child: GestureDetector(
-              onTap: () => _showUserProfile(chat['userName']),
-              child: Text(
-                chat['userName'],
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: chat['muted'] 
-                      ? AppTheme.grey.withValues(alpha: 0.7)
-                      : AppTheme.white,
-                ),
+          Text(
+            chat['userName'],
+            style: const TextStyle(
+              color: AppTheme.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          if (chat['isOnline'])
+            Container(
+              margin: const EdgeInsets.only(left: 8),
+              width: 8,
+              height: 8,
+              decoration: const BoxDecoration(
+                color: Colors.green,
+                shape: BoxShape.circle,
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-          if (chat['lastMessageType'] == 'media')
-            const Icon(Icons.attach_file, size: 16, color: AppTheme.grey),
-          if (chat['muted'])
-            const Icon(Icons.volume_off, size: 16, color: AppTheme.grey),
         ],
       ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      subtitle: Text(
+        chat['lastMessage'],
+        style: const TextStyle(color: AppTheme.grey),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Row(
-            children: [
-              if (chat['isTyping'])
-                const Text(
-                  '입력 중...',
-                  style: TextStyle(
-                    color: AppTheme.accentPink,
-                    fontStyle: FontStyle.italic,
-                  ),
-                )
-              else
-                Expanded(
-                  child: Text(
-                    chat['lastMessage'],
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: chat['muted'] 
-                          ? AppTheme.grey.withValues(alpha: 0.7)
-                          : AppTheme.grey,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 4),
           Text(
             chat['timestamp'],
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: AppTheme.grey.withValues(alpha: 0.7),
+            style: const TextStyle(
+              color: AppTheme.grey,
+              fontSize: 12,
             ),
           ),
-        ],
-      ),
-      trailing: chat['unreadCount'] > 0
-          ? Container(
-              padding: const EdgeInsets.all(6),
+          if (chat['unreadCount'] > 0)
+            Container(
+              padding: const EdgeInsets.all(4),
               decoration: const BoxDecoration(
                 color: AppTheme.accentPink,
                 shape: BoxShape.circle,
               ),
               child: Text(
-                '${chat['unreadCount']}',
+                chat['unreadCount'].toString(),
                 style: const TextStyle(
                   color: AppTheme.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
+                  fontSize: 10,
                 ),
               ),
-            )
-          : null,
+            ),
+        ],
+      ),
       onTap: () {
-        // 읽음 처리
+        // 로그인 상태 확인
+        if (AuthStateManager.instance.requiresLogin) {
+          AuthStateManager.instance.showLoginRequiredMessage(context);
+          return;
+        }
+
         setState(() {
           chat['unreadCount'] = 0;
         });
@@ -615,6 +556,12 @@ class _ChatTabState extends State<ChatTab> {
 
   /// 새 메시지 모달
   void _showNewMessageModal() {
+    // 로그인 상태 확인
+    if (AuthStateManager.instance.requiresLogin) {
+      AuthStateManager.instance.showLoginRequiredMessage(context);
+      return;
+    }
+
     showModalBottomSheet(
       context: context,
       backgroundColor: AppTheme.secondaryBlack,

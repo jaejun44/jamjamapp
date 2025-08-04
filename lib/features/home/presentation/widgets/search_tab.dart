@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
 import 'package:jamjamapp/core/services/search_service.dart';
+import 'package:jamjamapp/core/services/auth_state_manager.dart';
 import 'user_profile_screen.dart';
 import 'dart:async';
 
@@ -900,6 +901,12 @@ class _SearchTabState extends State<SearchTab> {
   }
 
   void _followMusician(Map<String, dynamic> musician) {
+    // 로그인 상태 확인
+    if (AuthStateManager.instance.requiresLogin) {
+      AuthStateManager.instance.showLoginRequiredMessage(context);
+      return;
+    }
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('${musician['name']}을(를) 팔로우했습니다'),

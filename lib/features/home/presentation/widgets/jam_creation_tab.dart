@@ -1,8 +1,10 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:jamjamapp/core/theme/app_theme.dart';
-import 'user_profile_screen.dart';
-import 'dart:async';
 import 'package:image_picker/image_picker.dart';
+import 'package:jamjamapp/core/theme/app_theme.dart';
+import 'package:jamjamapp/core/services/auth_state_manager.dart';
+import 'package:jamjamapp/features/home/presentation/widgets/user_profile_screen.dart';
+import 'dart:async';
 import 'dart:io';
 
 class JamCreationTab extends StatefulWidget {
@@ -18,9 +20,13 @@ class _JamCreationTabState extends State<JamCreationTab> {
   final _genreController = TextEditingController();
   final _instrumentsController = TextEditingController();
   final _descriptionController = TextEditingController();
+  final _maxParticipantsController = TextEditingController();
   
   bool _isCreating = false;
   bool _isUploading = false;
+  
+  // 참여인원 수 설정
+  int _maxParticipants = 5;
   
   // 실시간 업데이트 상태
   Timer? _realtimeUpdateTimer;
@@ -33,7 +39,9 @@ class _JamCreationTabState extends State<JamCreationTab> {
   
   // 업로드된 파일들
   List<Map<String, dynamic>> _uploadedFiles = [];
-  
+  Uint8List? _uploadedMediaData;
+  String? _uploadedMediaType;
+
   // 이미지 피커
   final ImagePicker _picker = ImagePicker();
 
@@ -120,6 +128,7 @@ class _JamCreationTabState extends State<JamCreationTab> {
     _genreController.dispose();
     _instrumentsController.dispose();
     _descriptionController.dispose();
+    _maxParticipantsController.dispose();
     super.dispose();
   }
 
@@ -314,8 +323,14 @@ class _JamCreationTabState extends State<JamCreationTab> {
 
   /// Jam 세션 참여
   void _joinJamSession(Map<String, dynamic> jamSession) {
+    // 로그인 상태 확인
+    if (AuthStateManager.instance.requiresLogin) {
+      AuthStateManager.instance.showLoginRequiredMessage(context);
+      return;
+    }
+
     // 방장인지 확인
-    final isHost = jamSession['createdBy'] == '락스타';
+    final isHost = jamSession['createdBy'] == AuthStateManager.instance.userName;
     
     if (isHost) {
       // 방장인 경우 바로 참여
@@ -589,43 +604,54 @@ class _JamCreationTabState extends State<JamCreationTab> {
               style: const TextStyle(color: AppTheme.white),
             ),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                Text(
-                  request['requestTime'],
-                  style: const TextStyle(color: AppTheme.grey, fontSize: 12),
-                ),
-                const Spacer(),
-                if (isPending) ...[
-                  TextButton(
-                    onPressed: () {
-                      setState(() {
-                        request['status'] = 'rejected';
-                      });
-                      _showApprovalResult('거절', request['userName']);
-                    },
-                    child: const Text(
-                      '거절',
-                      style: TextStyle(color: Colors.red),
+            Text(
+              '신청 시간: ${request['requestTime']}',
+              style: const TextStyle(color: AppTheme.grey, fontSize: 10),
+            ),
+            if (isPending) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        setState(() {
+                          request['status'] = 'approved';
+                        });
+                        _showSuccessDialog('${request['userName']}님의 참여 신청을 수락했습니다!');
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                      child: const Text(
+                        '수락',
+                        style: TextStyle(color: AppTheme.white, fontSize: 12),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  ElevatedButton(
-                    onPressed: () {
-                      setState(() {
-                        request['status'] = 'approved';
-                      });
-                      _showApprovalResult('승인', request['userName']);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.accentPink,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        setState(() {
+                          request['status'] = 'rejected';
+                        });
+                        _showSuccessDialog('${request['userName']}님의 참여 신청을 거부했습니다.');
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                      child: const Text(
+                        '거부',
+                        style: TextStyle(color: AppTheme.white, fontSize: 12),
+                      ),
                     ),
-                    child: const Text('승인'),
                   ),
                 ],
-              ],
-            ),
+              ),
+            ],
           ],
         ),
       ),
@@ -693,6 +719,12 @@ class _JamCreationTabState extends State<JamCreationTab> {
 
   /// Jam 생성 모달 표시
   void _showJamCreationModal() {
+    // 로그인 상태 확인
+    if (AuthStateManager.instance.requiresLogin) {
+      AuthStateManager.instance.showLoginRequiredMessage(context);
+      return;
+    }
+
     showModalBottomSheet(
       context: context,
       backgroundColor: AppTheme.secondaryBlack,
@@ -796,6 +828,165 @@ class _JamCreationTabState extends State<JamCreationTab> {
                     ),
                     const SizedBox(height: 16),
                     
+                    // 최대 참여자 수
+                    TextFormField(
+                      controller: _maxParticipantsController,
+                      decoration: const InputDecoration(
+                        labelText: '최대 참여자 수',
+                        labelStyle: TextStyle(color: AppTheme.grey),
+                        hintText: '예: 5',
+                        hintStyle: TextStyle(color: AppTheme.grey),
+                      ),
+                      style: const TextStyle(color: AppTheme.white),
+                      keyboardType: TextInputType.number,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return '최대 참여자 수를 입력해주세요.';
+                        }
+                        final number = int.tryParse(value);
+                        if (number == null || number < 1) {
+                          return '유효한 숫자를 입력해주세요.';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // 미디어 업로드 섹션
+                    const Text(
+                      '미디어 업로드 (선택사항)',
+                      style: TextStyle(
+                        color: AppTheme.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => _showFileUploadModal('image'),
+                            icon: const Icon(Icons.photo, color: AppTheme.white),
+                            label: const Text('이미지', style: TextStyle(color: AppTheme.white)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.accentPink,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => _showFileUploadModal('video'),
+                            icon: const Icon(Icons.videocam, color: AppTheme.white),
+                            label: const Text('비디오', style: TextStyle(color: AppTheme.white)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.accentPink,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => _showFileUploadModal('audio'),
+                            icon: const Icon(Icons.music_note, color: AppTheme.white),
+                            label: const Text('오디오', style: TextStyle(color: AppTheme.white)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.accentPink,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // 업로드된 미디어 표시
+                    if (_uploadedMediaData != null) ...[
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryBlack,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppTheme.grey.withValues(alpha: 0.3)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  _getMediaIcon(_uploadedMediaType ?? ''),
+                                  color: AppTheme.accentPink,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '업로드된 미디어',
+                                  style: const TextStyle(
+                                    color: AppTheme.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const Spacer(),
+                                IconButton(
+                                  onPressed: () {
+                                    setState(() {
+                                      _uploadedMediaData = null;
+                                      _uploadedMediaType = null;
+                                    });
+                                  },
+                                  icon: const Icon(Icons.close, color: AppTheme.grey, size: 20),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            if (_uploadedMediaType == 'image')
+                              Container(
+                                height: 120,
+                                width: double.infinity,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  image: DecorationImage(
+                                    image: MemoryImage(_uploadedMediaData!),
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                              )
+                            else
+                              Container(
+                                height: 80,
+                                width: double.infinity,
+                                decoration: BoxDecoration(
+                                  color: AppTheme.secondaryBlack,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Center(
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        _getMediaIcon(_uploadedMediaType ?? ''),
+                                        color: AppTheme.accentPink,
+                                        size: 24,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        _getMediaTypeText(_uploadedMediaType ?? ''),
+                                        style: const TextStyle(color: AppTheme.white),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    
                     // 설명
                     TextFormField(
                       controller: _descriptionController,
@@ -807,61 +998,6 @@ class _JamCreationTabState extends State<JamCreationTab> {
                         hintStyle: TextStyle(color: AppTheme.grey),
                       ),
                       style: const TextStyle(color: AppTheme.white),
-                    ),
-                    const SizedBox(height: 16),
-                    
-                    // 파일 업로드
-                    if (_uploadedFiles.isNotEmpty) ...[
-                      Text(
-                        '업로드된 파일',
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: AppTheme.white,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      ...(_uploadedFiles.map((file) => ListTile(
-                        leading: Icon(
-                          _getFileIcon(file['type']),
-                          color: AppTheme.accentPink,
-                        ),
-                        title: Text(
-                          file['name'],
-                          style: const TextStyle(color: AppTheme.white),
-                        ),
-                        subtitle: Text(
-                          file['size'],
-                          style: const TextStyle(color: AppTheme.grey),
-                        ),
-                        trailing: IconButton(
-                          onPressed: () {
-                            setState(() {
-                              _uploadedFiles.remove(file);
-                            });
-                          },
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                        ),
-                      ))),
-                      const SizedBox(height: 16),
-                    ],
-                    
-                    // 파일 업로드 버튼
-                    OutlinedButton.icon(
-                      onPressed: _isUploading ? null : _uploadFile,
-                      icon: _isUploading 
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(AppTheme.accentPink),
-                              ),
-                            )
-                          : const Icon(Icons.upload_file),
-                      label: Text(_isUploading ? '업로드 중...' : '파일 업로드'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppTheme.accentPink,
-                        side: const BorderSide(color: AppTheme.accentPink),
-                      ),
                     ),
                   ],
                 ),
@@ -907,58 +1043,82 @@ class _JamCreationTabState extends State<JamCreationTab> {
   }
 
   void _createJamSession() async {
+    // 로그인 상태 확인
+    if (AuthStateManager.instance.requiresLogin) {
+      AuthStateManager.instance.showLoginRequiredMessage(context);
+      return;
+    }
+
     if (!_formKey.currentState!.validate()) return;
 
     setState(() {
       _isCreating = true;
     });
 
-    // Jam 세션 생성 시뮬레이션
-    await Future.delayed(const Duration(seconds: 2));
+    try {
+      // Jam 세션 생성 시뮬레이션
+      await Future.delayed(const Duration(seconds: 2));
 
-    setState(() {
-      _isCreating = false;
-    });
+      if (mounted) {
+        // 새 Jam 세션 추가
+        final newJamSession = {
+          'id': DateTime.now().millisecondsSinceEpoch,
+          'title': _titleController.text,
+          'genre': _genreController.text,
+          'instruments': _instrumentsController.text,
+          'participants': 1,
+          'maxParticipants': int.tryParse(_maxParticipantsController.text) ?? 5,
+          'status': '모집 중',
+          'createdBy': AuthStateManager.instance.userName,
+          'createdAt': '방금 전',
+          'description': _descriptionController.text,
+          'tags': _genreController.text.split(',').map((e) => e.trim()).toList(),
+          'isLive': false,
+          'recordingUrl': null,
+          'files': _uploadedFiles,
+          'mediaData': _uploadedMediaData,
+          'mediaType': _uploadedMediaType,
+          'chat': [],
+        };
 
-    if (mounted) {
-      // 새 Jam 세션 추가
-      final newJamSession = {
-        'id': DateTime.now().millisecondsSinceEpoch,
-        'title': _titleController.text,
-        'genre': _genreController.text,
-        'instruments': _instrumentsController.text,
-        'participants': 1,
-        'maxParticipants': 5,
-        'status': '모집 중',
-        'createdBy': '나',
-        'createdAt': '방금 전',
-        'description': _descriptionController.text,
-        'tags': _genreController.text.split(',').map((e) => e.trim()).toList(),
-        'isLive': false,
-        'recordingUrl': null,
-        'files': _uploadedFiles,
-        'chat': [],
-      };
+        setState(() {
+          _recentJamSessions.insert(0, newJamSession);
+        });
 
-      setState(() {
-        _recentJamSessions.insert(0, newJamSession);
-      });
+        // 폼 초기화
+        _titleController.clear();
+        _genreController.clear();
+        _instrumentsController.clear();
+        _descriptionController.clear();
+        _maxParticipantsController.clear();
+        _uploadedFiles.clear();
+        _uploadedMediaData = null;
+        _uploadedMediaType = null;
 
-      // 폼 초기화
-      _titleController.clear();
-      _genreController.clear();
-      _instrumentsController.clear();
-      _descriptionController.clear();
-      _uploadedFiles.clear();
+        Navigator.of(context).pop(); // 모달 닫기
 
-      Navigator.of(context).pop(); // 모달 닫기
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Jam 세션이 생성되었습니다!'),
-          backgroundColor: AppTheme.accentPink,
-        ),
-      );
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Jam 세션이 생성되었습니다!'),
+            backgroundColor: AppTheme.accentPink,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Jam 세션 생성 중 오류가 발생했습니다: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCreating = false;
+        });
+      }
     }
   }
 
@@ -1079,6 +1239,92 @@ class _JamCreationTabState extends State<JamCreationTab> {
             style: const TextStyle(color: AppTheme.white),
           ),
           const SizedBox(height: 20),
+          
+          // 미디어 표시 (있는 경우)
+          if (jamSession['mediaData'] != null) ...[
+            Text(
+              '미디어',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: AppTheme.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryBlack,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.grey.withValues(alpha: 0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        _getMediaIcon(jamSession['mediaType']),
+                        color: AppTheme.accentPink,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _getMediaTypeText(jamSession['mediaType']),
+                        style: const TextStyle(
+                          color: AppTheme.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  if (jamSession['mediaType'] == 'image')
+                    Container(
+                      height: 200,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        image: DecorationImage(
+                          image: MemoryImage(jamSession['mediaData']),
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    )
+                  else
+                    Container(
+                      height: 100,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: AppTheme.secondaryBlack,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Center(
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              _getMediaIcon(jamSession['mediaType']),
+                              color: AppTheme.accentPink,
+                              size: 32,
+                            ),
+                            const SizedBox(width: 12),
+                            Text(
+                              _getMediaTypeText(jamSession['mediaType']),
+                              style: const TextStyle(
+                                color: AppTheme.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+          ],
           
           // 태그
           Text(
@@ -1248,10 +1494,17 @@ class _JamCreationTabState extends State<JamCreationTab> {
             CircleAvatar(
               radius: 20,
               backgroundColor: AppTheme.accentPink,
-              child: Text(
-                participant['avatar'],
-                style: const TextStyle(fontSize: 16),
-              ),
+              backgroundImage: participant['name'] == AuthStateManager.instance.userName && 
+                              AuthStateManager.instance.profileImageBytes != null
+                  ? MemoryImage(AuthStateManager.instance.profileImageBytes!)
+                  : null,
+              child: participant['name'] == AuthStateManager.instance.userName && 
+                     AuthStateManager.instance.profileImageBytes != null
+                  ? null
+                  : Text(
+                      participant['avatar'],
+                      style: const TextStyle(fontSize: 16),
+                    ),
             ),
             if (participant['isOnline'])
               Positioned(
@@ -1572,6 +1825,79 @@ class _JamCreationTabState extends State<JamCreationTab> {
   String _getCurrentTime() {
     final now = DateTime.now();
     return '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+  }
+
+  /// 파일 업로드 모달 표시
+  void _showFileUploadModal(String type) async {
+    setState(() {
+      _uploadedMediaType = type;
+      _uploadedMediaData = null;
+    });
+
+    try {
+      XFile? pickedFile;
+      switch (type) {
+        case 'image':
+          pickedFile = await _picker.pickImage(
+            source: ImageSource.gallery,
+            maxWidth: 1920,
+            maxHeight: 1080,
+            imageQuality: 85,
+          );
+          break;
+        case 'video':
+          pickedFile = await _picker.pickVideo(
+            source: ImageSource.gallery,
+            maxDuration: const Duration(minutes: 10),
+          );
+          break;
+        case 'audio':
+          pickedFile = await _picker.pickMedia();
+          break;
+      }
+
+      if (pickedFile != null) {
+        final bytes = await pickedFile.readAsBytes();
+        setState(() {
+          _uploadedMediaData = bytes;
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('파일 업로드 중 오류가 발생했습니다: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  /// 미디어 타입에 따른 아이콘 반환
+  IconData _getMediaIcon(String type) {
+    switch (type) {
+      case 'image':
+        return Icons.image;
+      case 'video':
+        return Icons.videocam;
+      case 'audio':
+        return Icons.music_note;
+      default:
+        return Icons.insert_drive_file;
+    }
+  }
+
+  /// 미디어 타입에 따른 텍스트 반환
+  String _getMediaTypeText(String type) {
+    switch (type) {
+      case 'image':
+        return '이미지';
+      case 'video':
+        return '비디오';
+      case 'audio':
+        return '오디오';
+      default:
+        return '파일';
+    }
   }
 
   @override

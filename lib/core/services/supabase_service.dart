@@ -203,4 +203,57 @@ class SupabaseService {
     // 이 메서드는 나중에 구현 예정
     throw UnimplementedError('uploadFileFromPath는 아직 구현되지 않았습니다. uploadFile을 사용하세요.');
   }
+
+  /// 백엔드 연결 테스트
+  Future<bool> testConnection() async {
+    try {
+      // 간단한 쿼리로 연결 테스트
+      final response = await _client
+          .from('profiles')
+          .select('count')
+          .limit(1);
+      
+      print('✅ Supabase 연결 성공!');
+      return true;
+    } catch (e) {
+      print('❌ Supabase 연결 실패: $e');
+      return false;
+    }
+  }
+
+  /// 데이터베이스 스키마 확인
+  Future<void> checkDatabaseSchema() async {
+    try {
+      // profiles 테이블 확인
+      final profilesResponse = await _client
+          .from('profiles')
+          .select('*')
+          .limit(1);
+      print('✅ profiles 테이블 확인됨');
+      
+      // feeds 테이블 확인
+      final feedsResponse = await _client
+          .from('feeds')
+          .select('*')
+          .limit(1);
+      print('✅ feeds 테이블 확인됨');
+      
+      // jam_sessions 테이블 확인
+      final jamSessionsResponse = await _client
+          .from('jam_sessions')
+          .select('*')
+          .limit(1);
+      print('✅ jam_sessions 테이블 확인됨');
+      
+      // chat_messages 테이블 확인
+      final chatMessagesResponse = await _client
+          .from('chat_messages')
+          .select('*')
+          .limit(1);
+      print('✅ chat_messages 테이블 확인됨');
+      
+    } catch (e) {
+      print('❌ 데이터베이스 스키마 확인 실패: $e');
+    }
+  }
 } 

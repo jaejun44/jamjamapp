@@ -42,8 +42,14 @@ class _SignupModalState extends State<SignupModal> {
       _isLoading = true;
     });
 
+    print('🎯 회원가입 시작...');
+
     try {
+      print('📧 이메일: ${_emailController.text.trim()}');
+      print('👤 닉네임: ${_nicknameController.text.trim()}');
+      
       // Supabase 회원가입
+      print('🔄 Supabase 회원가입 시도...');
       final response = await SupabaseService.instance.signUpWithEmail(
         email: _emailController.text.trim(),
         password: _passwordController.text,
@@ -52,8 +58,11 @@ class _SignupModalState extends State<SignupModal> {
         },
       );
 
+      print('✅ Supabase 회원가입 성공: ${response.user?.id}');
+
       if (response.user != null) {
         // 프로필 정보 업데이트
+        print('🔄 프로필 정보 업데이트 시도...');
         await SupabaseService.instance.updateUserProfile(
           userId: response.user!.id,
           profileData: {
@@ -63,8 +72,13 @@ class _SignupModalState extends State<SignupModal> {
           },
         );
 
+        print('✅ 프로필 정보 업데이트 성공');
+
         // 회원가입 성공 시 자동 로그인 상태 저장
+        print('🔄 자동 로그인 데이터 저장...');
         await _saveAutoLoginData();
+
+        print('✅ 회원가입 완료!');
 
         if (mounted) {
           Navigator.of(context).pop(true);
@@ -77,6 +91,7 @@ class _SignupModalState extends State<SignupModal> {
         }
       }
     } catch (e) {
+      print('❌ 회원가입 실패: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
