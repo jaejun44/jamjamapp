@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/search_utils.dart';
@@ -10,8 +11,8 @@ class SearchService {
   SearchService._internal();
 
   // 캐시 관리
-  final Map<String, Map<String, dynamic>> _searchCache = {};
-  final Map<String, DateTime> _cacheTimestamps = {};
+  final Map<String, Map<String, dynamic>> _searchCache = LinkedHashMap<String, Map<String, dynamic>>();
+  final Map<String, DateTime> _cacheTimestamps = LinkedHashMap<String, DateTime>();
   static const Duration _cacheExpiration = Duration(minutes: 10);
 
   // 검색 히스토리 관리
@@ -220,10 +221,10 @@ class SearchService {
     try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
       List<String> favorites = prefs.getStringList(_favoritesKey) ?? [];
-      return favorites.toSet();
+      return LinkedHashSet<String>.from(favorites);
     } catch (e) {
       _setError('즐겨찾기 로드 중 오류가 발생했습니다: $e');
-      return {};
+      return LinkedHashSet<String>();
     }
   }
 

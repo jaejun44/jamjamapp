@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:jamjamapp/core/services/comment_service.dart';
 import 'package:jamjamapp/core/services/auth_state_manager.dart';
+import 'package:jamjamapp/core/services/profile_image_manager.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
 
 class CommentModal extends StatefulWidget {
@@ -467,15 +468,10 @@ class _CommentModalState extends State<CommentModal> {
                 ),
                 child: Row(
                   children: [
-                    CircleAvatar(
+                    // ProfileImageManager를 사용한 프로필 이미지 표시
+                    ProfileImageManager.instance.buildProfileImage(
                       radius: 16,
-                      backgroundColor: AppTheme.accentPink,
-                      backgroundImage: AuthStateManager.instance.profileImageBytes != null
-                          ? MemoryImage(AuthStateManager.instance.profileImageBytes!)
-                          : null,
-                      child: AuthStateManager.instance.profileImageBytes != null
-                          ? null
-                          : const Icon(Icons.person, color: AppTheme.white, size: 16),
+                      placeholder: const Icon(Icons.person, color: AppTheme.white, size: 16),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -555,18 +551,16 @@ class _CommentModalState extends State<CommentModal> {
             children: [
               GestureDetector(
                 onTap: () => _showUserProfile(comment['author']),
-                child: CircleAvatar(
-                  radius: 16,
-                  backgroundColor: AppTheme.accentPink,
-                  backgroundImage: comment['author'] == AuthStateManager.instance.userName && 
-                                  AuthStateManager.instance.profileImageBytes != null
-                      ? MemoryImage(AuthStateManager.instance.profileImageBytes!)
-                      : null,
-                  child: comment['author'] == AuthStateManager.instance.userName && 
-                         AuthStateManager.instance.profileImageBytes != null
-                      ? null
-                      : const Icon(Icons.person, color: AppTheme.white, size: 16),
-                ),
+                child: comment['author'] == AuthStateManager.instance.userName
+                    ? ProfileImageManager.instance.buildProfileImage(
+                        radius: 16,
+                        placeholder: const Icon(Icons.person, color: AppTheme.white, size: 16),
+                      )
+                    : CircleAvatar(
+                        radius: 16,
+                        backgroundColor: AppTheme.accentPink,
+                        child: const Icon(Icons.person, color: AppTheme.white, size: 16),
+                      ),
               ),
               const SizedBox(width: 12),
               Expanded(

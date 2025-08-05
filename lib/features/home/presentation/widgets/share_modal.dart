@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
+import 'package:jamjamapp/core/services/counter_service.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ShareModal extends StatefulWidget {
   final Map<String, dynamic> feed;
@@ -353,55 +357,135 @@ class _ShareModalState extends State<ShareModal> {
     Navigator.of(context).pop();
   }
 
-  /// 특정 플랫폼으로 공유
-  void _shareTo(String platform) {
+  /// 특정 플랫폼으로 공유 (실제 구현)
+  void _shareTo(String platform) async {
     final feedTitle = widget.feed['title'] ?? '피드';
     final feedAuthor = widget.feed['author'] ?? '작성자';
+    final feedId = widget.feed['id'] as int;
     
-    String message = '';
-    String platformName = '';
+    // 공유할 텍스트 생성
+    final shareText = '🎵 JamJam에서 "$feedTitle" by $feedAuthor\n\n'
+        '음악을 함께 만들어보세요! #JamJam #음악협업';
+    final shareUrl = 'https://jamjam.app/feed/$feedId'; // 실제 앱 URL로 변경 필요
+    final fullShareText = '$shareText\n\n$shareUrl';
     
-    switch (platform) {
-      case 'copy':
-        message = '링크가 클립보드에 복사되었습니다!';
-        platformName = '클립보드';
-        break;
-      case 'twitter':
-        message = '트위터로 공유되었습니다!';
-        platformName = '트위터';
-        break;
-      case 'facebook':
-        message = '페이스북으로 공유되었습니다!';
-        platformName = '페이스북';
-        break;
-      case 'instagram':
-        message = '인스타그램으로 공유되었습니다!';
-        platformName = '인스타그램';
-        break;
-      case 'whatsapp':
-        message = '왓츠앱으로 공유되었습니다!';
-        platformName = '왓츠앱';
-        break;
-      case 'email':
-        message = '이메일로 공유되었습니다!';
-        platformName = '이메일';
-        break;
-      case 'sms':
-        message = 'SMS로 공유되었습니다!';
-        platformName = 'SMS';
-        break;
-      case 'more':
-        message = '더 많은 공유 옵션이 표시됩니다!';
-        platformName = '더보기';
-        break;
+    try {
+      switch (platform) {
+        case 'copy':
+          await _copyToClipboard(shareUrl);
+          break;
+        case 'twitter':
+          await _shareToTwitter(shareText, shareUrl);
+          break;
+        case 'facebook':
+          await _shareToFacebook(shareUrl);
+          break;
+        case 'instagram':
+          await _shareToInstagram(shareText);
+          break;
+        case 'whatsapp':
+          await _shareToWhatsApp(fullShareText);
+          break;
+        case 'email':
+          await _shareToEmail(feedTitle, fullShareText);
+          break;
+        case 'sms':
+          await _shareToSMS(fullShareText);
+          break;
+        case 'more':
+          await _shareGeneral(fullShareText);
+          break;
+      }
+      
+      // CounterService에 공유 카운트 증가
+      await CounterService.instance.incrementShareCount(feedId);
+      
+      Navigator.of(context).pop();
+    } catch (e) {
+      print('❌ 공유 실패: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('공유 중 오류가 발생했습니다: ${e.toString()}'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
     }
+  }
 
+  /// 클립보드에 복사
+  Future<void> _copyToClipboard(String url) async {
+    await Clipboard.setData(ClipboardData(text: url));
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$platformName: $message'),
+      const SnackBar(
+        content: Text('링크가 클립보드에 복사되었습니다!'),
         backgroundColor: AppTheme.accentPink,
-        duration: const Duration(seconds: 2),
+        duration: Duration(seconds: 2),
       ),
     );
+  }
+
+  /// 트위터 공유
+  Future<void> _shareToTwitter(String text, String url) async {
+    final twitterUrl = 'https://twitter.com/intent/tweet?text=${Uri.encodeComponent(text)}&url=${Uri.encodeComponent(url)}';
+    await _launchUrl(twitterUrl, '트위터');
+  }
+
+  /// 페이스북 공유
+  Future<void> _shareToFacebook(String url) async {
+    final facebookUrl = 'https://www.facebook.com/sharer/sharer.php?u=${Uri.encodeComponent(url)}';
+    await _launchUrl(facebookUrl, '페이스북');
+  }
+
+  /// 인스타그램 공유 (텍스트만)
+  Future<void> _shareToInstagram(String text) async {
+    await Share.share(text);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('인스타그램 앱에서 스토리나 포스트로 공유해주세요!'),
+        backgroundColor: AppTheme.accentPink,
+        duration: Duration(seconds: 3),
+      ),
+    );
+  }
+
+  /// 왓츠앱 공유
+  Future<void> _shareToWhatsApp(String text) async {
+    final whatsappUrl = 'https://wa.me/?text=${Uri.encodeComponent(text)}';
+    await _launchUrl(whatsappUrl, '왓츠앱');
+  }
+
+  /// 이메일 공유
+  Future<void> _shareToEmail(String subject, String body) async {
+    final emailUrl = 'mailto:?subject=${Uri.encodeComponent(subject)}&body=${Uri.encodeComponent(body)}';
+    await _launchUrl(emailUrl, '이메일');
+  }
+
+  /// SMS 공유
+  Future<void> _shareToSMS(String text) async {
+    final smsUrl = 'sms:?body=${Uri.encodeComponent(text)}';
+    await _launchUrl(smsUrl, 'SMS');
+  }
+
+  /// 일반 공유 (시스템 공유 시트)
+  Future<void> _shareGeneral(String text) async {
+    await Share.share(text);
+  }
+
+  /// URL 실행
+  Future<void> _launchUrl(String url, String platformName) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$platformName으로 공유되었습니다!'),
+          backgroundColor: AppTheme.accentPink,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } else {
+      throw Exception('$platformName을 열 수 없습니다.');
+    }
   }
 } 

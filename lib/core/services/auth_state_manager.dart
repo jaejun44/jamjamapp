@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'supabase_service.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart'; // Added for BuildContext
+import 'profile_image_manager.dart'; // Added for ProfileImageManager
 
 class AuthStateManager {
   static AuthStateManager? _instance;
@@ -48,39 +49,56 @@ class AuthStateManager {
     }
   }
 
-  /// 앱 시작 시 로그인 상태 초기화
+  /// 인증 상태 초기화
   Future<void> initializeAuthState() async {
-    print('🔍 AuthStateManager 초기화 시작');
-    
-    // 1. SharedPreferences에서 로그인 상태 확인
-    final prefs = await SharedPreferences.getInstance();
-    final savedIsLoggedIn = prefs.getBool('isLoggedIn') ?? false;
-    
-    print('🔍 SharedPreferences 로그인 상태: $savedIsLoggedIn');
-    
-    if (savedIsLoggedIn) {
-      // 2. Supabase 인증 상태 확인
-      final supabaseUser = SupabaseService.instance.currentUser;
-      print('🔍 Supabase 현재 사용자: ${supabaseUser?.id}');
+    try {
+      print('🔍 AuthStateManager 초기화 시작');
       
-      if (supabaseUser != null) {
-        // 3. SharedPreferences에서 사용자 정보 로드
-        _isLoggedIn = true;
-        _userName = prefs.getString('userName') ?? 'JamMaster';
-        _userNickname = prefs.getString('userNickname') ?? 'jammaster';
-        _userBio = prefs.getString('userBio') ?? '재즈와 팝을 사랑하는 음악인입니다 🎵';
-        _userInstruments = prefs.getString('userInstruments') ?? '기타, 피아노';
-        _profileImageName = prefs.getString('profileImageName');
+      // 1. SharedPreferences에서 로그인 상태 확인
+      final prefs = await SharedPreferences.getInstance();
+      final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
+      print('🔍 SharedPreferences 로그인 상태: $isLoggedIn');
+      
+      // 2. ProfileImageManager는 main.dart에서 이미 초기화됨
+      print('🔄 ProfileImageManager 이미 초기화됨');
+      
+      // 3. 로그인 상태에 따른 처리
+      if (isLoggedIn) {
+        // 기존 프로필 데이터 로드 (덮어쓰지 않도록)
+        final userName = prefs.getString('userName') ?? 'JamMaster';
+        final userNickname = prefs.getString('userNickname') ?? '뮤직킹';
+        final userBio = prefs.getString('userBio') ?? '음악을 사랑하는 testuser입니다 🎵';
+        final userInstruments = prefs.getString('userInstruments') ?? '기타, 피아노';
         
-        print('✅ 로그인 상태 복원됨: $_userName (이미지: $_profileImageName)');
-        _notifyStateChange();
+        // 프로필 데이터 업데이트 (기존 데이터 보존)
+        _userName = userName;
+        _userNickname = userNickname;
+        _userBio = userBio;
+        _userInstruments = userInstruments;
+        _isLoggedIn = true;
+        
+        // 프로필 이미지 동기화 (ProfileImageManager에서 가져오기)
+        final profileImageBytes = ProfileImageManager.instance.getCurrentUserProfileImage();
+        if (profileImageBytes != null) {
+          _profileImageBytes = profileImageBytes;
+          print('✅ AuthStateManager 프로필 이미지 동기화 완료: ${(profileImageBytes.length / 1024).toStringAsFixed(1)}KB');
+        } else {
+          print('✅ AuthStateManager 프로필 이미지 동기화 완료: 이미지 없음');
+        }
+        
+        print('✅ 로그인 상태 복원됨: $userName (이미지: ${_profileImageName ?? '없음'})');
       } else {
-        // Supabase 인증이 없으면 로그아웃 처리
-        print('❌ Supabase 인증 없음, 로그아웃 처리');
-        await _clearAuthState();
+        // 로그아웃 상태
+        _isLoggedIn = false;
+        print('❌ Supabase 사용자 없음, 로그아웃 상태로 변경');
       }
-    } else {
-      print('❌ 로그인되지 않은 상태');
+      
+      // 4. 상태 변화 알림
+      _notifyStateChange();
+      
+      print('✅ 인증 상태 초기화 완료 (프로필 데이터 보존)');
+    } catch (e) {
+      print('❌ AuthStateManager 초기화 실패: $e');
       _isLoggedIn = false;
       _notifyStateChange();
     }
@@ -133,6 +151,10 @@ class AuthStateManager {
     }
     
     print('✅ 로그인 상태 업데이트 완료: $_userName (기존 데이터 보존됨)');
+    
+    // 프로필 이미지 복원
+    await ProfileImageManager.instance.restoreImageOnLogin();
+    
     _notifyStateChange();
   }
 
@@ -143,38 +165,70 @@ class AuthStateManager {
     // Supabase 로그아웃
     await SupabaseService.instance.signOut();
     
-    // 로컬 상태 초기화
+    // 프로필 이미지 보존
+    await ProfileImageManager.instance.preserveImageOnLogout();
+    
+    // 로컬 상태 초기화 (프로필 데이터는 보존)
     await _clearAuthState();
     
     print('✅ 로그아웃 완료');
     _notifyStateChange();
   }
 
-  /// 인증 상태 완전 초기화
+  /// 인증 상태 완전 초기화 - SharedPreferences 상태 진단 추가
   Future<void> _clearAuthState() async {
     final prefs = await SharedPreferences.getInstance();
     
-    // 로컬 상태 초기화
-    _isLoggedIn = false;
-    _userName = 'JamMaster';
-    _userNickname = 'jammaster';
-    _userBio = '재즈와 팝을 사랑하는 음악인입니다 🎵';
-    _userInstruments = '기타, 피아노';
-    _profileImageBytes = null;
-    _profileImageName = null;
+    // 🧪 로그아웃 전 SharedPreferences 상태 확인
+    final allKeysBefore = prefs.getKeys();
+    final appStateKeysBefore = allKeysBefore.where((key) => key.startsWith('app_state_')).toList();
+    final authKeysBefore = allKeysBefore.where((key) => ['isLoggedIn', 'userId', 'userEmail', 'loginTime'].contains(key)).toList();
+    final profileKeysBefore = allKeysBefore.where((key) => ['userName', 'userNickname', 'userBio', 'userInstruments', 'profileImageName'].contains(key)).toList();
     
-    // SharedPreferences 초기화
+    print('🔍 로그아웃 전 상태:');
+    print('  - 앱 상태 키들: $appStateKeysBefore (${appStateKeysBefore.length}개)');
+    print('  - 인증 키들: $authKeysBefore (${authKeysBefore.length}개)');
+    print('  - 프로필 키들: $profileKeysBefore (${profileKeysBefore.length}개)');
+    
+    // 로그인 상태만 초기화하고 프로필 데이터는 보존
+    _isLoggedIn = false;
+    
+    // 프로필 데이터는 보존 (로그아웃 시에도 유지)
+    // _userName, _userNickname, _userBio, _userInstruments, _profileImageBytes는 그대로 유지
+    
+    // SharedPreferences에서 로그인 관련 데이터만 제거
     await prefs.setBool('isLoggedIn', false);
     await prefs.remove('userId');
-    await prefs.remove('userName');
-    await prefs.remove('userNickname');
     await prefs.remove('userEmail');
-    await prefs.remove('userBio');
-    await prefs.remove('userInstruments');
     await prefs.remove('loginTime');
-    await prefs.remove('profileImageName');
     
-    print('✅ 인증 상태 초기화 완료');
+    // 프로필 데이터는 삭제하지 않음 (보존)
+    // await prefs.remove('userName');
+    // await prefs.remove('userNickname');
+    // await prefs.remove('userBio');
+    // await prefs.remove('userInstruments');
+    // await prefs.remove('profileImageName');
+    
+    // 🧪 로그아웃 후 SharedPreferences 상태 확인
+    final allKeysAfter = prefs.getKeys();
+    final appStateKeysAfter = allKeysAfter.where((key) => key.startsWith('app_state_')).toList();
+    final authKeysAfter = allKeysAfter.where((key) => ['isLoggedIn', 'userId', 'userEmail', 'loginTime'].contains(key)).toList();
+    final profileKeysAfter = allKeysAfter.where((key) => ['userName', 'userNickname', 'userBio', 'userInstruments', 'profileImageName'].contains(key)).toList();
+    
+    print('🔍 로그아웃 후 상태:');
+    print('  - 앱 상태 키들: $appStateKeysAfter (${appStateKeysAfter.length}개)');
+    print('  - 인증 키들: $authKeysAfter (${authKeysAfter.length}개)');
+    print('  - 프로필 키들: $profileKeysAfter (${profileKeysAfter.length}개)');
+    
+    // 🧪 AppState 키들이 보존되었는지 확인
+    if (appStateKeysBefore.length == appStateKeysAfter.length) {
+      print('✅ AppState 키들이 로그아웃 후에도 보존됨 (${appStateKeysAfter.length}개)');
+    } else {
+      print('❌ AppState 키가 손실됨: ${appStateKeysBefore.length} → ${appStateKeysAfter.length}');
+      print('❌ 손실된 키들: ${appStateKeysBefore.toSet().difference(appStateKeysAfter.toSet())}');
+    }
+    
+    print('✅ 인증 상태 초기화 완료 (프로필 데이터 보존)');
   }
 
   /// 프로필 이미지 업데이트

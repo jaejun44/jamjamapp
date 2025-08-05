@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:collection';
 import 'package:jamjamapp/core/services/app_state_manager.dart';
 import 'package:jamjamapp/core/services/auth_state_manager.dart';
 
@@ -24,8 +25,8 @@ class CommentService {
     };
 
     // AppStateManager에 댓글 추가
-    final commentData = Map<String, List<Map<String, dynamic>>>.from(
-      AppStateManager.instance.getState('comments')['commentData'] ?? {}
+    final commentData = LinkedHashMap<String, List<Map<String, dynamic>>>.from(
+      AppStateManager.instance.getState('comments')['commentData'] ?? LinkedHashMap<String, List<Map<String, dynamic>>>()
     );
     
     print('🔍 현재 저장된 댓글 데이터 키들: ${commentData.keys.toList()}');

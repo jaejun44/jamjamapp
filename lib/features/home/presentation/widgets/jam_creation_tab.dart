@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
 import 'package:jamjamapp/core/services/auth_state_manager.dart';
+import 'package:jamjamapp/core/services/profile_image_manager.dart';
+import 'package:jamjamapp/core/services/app_state_manager.dart';
 import 'package:jamjamapp/features/home/presentation/widgets/user_profile_screen.dart';
 import 'dart:async';
 import 'dart:io';
@@ -14,7 +16,8 @@ class JamCreationTab extends StatefulWidget {
   State<JamCreationTab> createState() => _JamCreationTabState();
 }
 
-class _JamCreationTabState extends State<JamCreationTab> {
+class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAliveClientMixin {
+  final AppStateManager _appStateManager = AppStateManager.instance;
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _genreController = TextEditingController();
@@ -45,14 +48,17 @@ class _JamCreationTabState extends State<JamCreationTab> {
   // 이미지 피커
   final ImagePicker _picker = ImagePicker();
 
-  // 임시 Jam 세션 데이터 (확장된 버전)
-  final List<Map<String, dynamic>> _recentJamSessions = [
+  // 🔄 잼 세션 데이터 안전한 관리 (ListView 호환)
+  List<Map<String, dynamic>> _recentJamSessions = [];
+
+  // 기본 더미 데이터 (최초 실행 시에만 사용)
+  final List<Map<String, dynamic>> _defaultJamSessions = [
     {
       'id': 1,
       'title': '재즈 팝 퓨전 세션',
       'genre': '재즈, 팝',
       'instruments': '기타, 피아노, 드럼',
-      'participants': 3,
+      'participants': 3, // participantsList.length와 동기화됨
       'maxParticipants': 5,
       'status': '모집 중',
       'createdBy': 'JamMaster1',
@@ -63,13 +69,42 @@ class _JamCreationTabState extends State<JamCreationTab> {
       'recordingUrl': null,
       'files': [],
       'chat': [],
+      'participantsList': [
+        {
+          'id': 1,
+          'name': 'JamMaster1',
+          'avatar': '🎷',
+          'role': '방장',
+          'instruments': ['색소폰', '피아노'],
+          'isOnline': true,
+          'joinTime': '2시간 전',
+        },
+        {
+          'id': 2,
+          'name': 'GuitarHero3',
+          'avatar': '🎸',
+          'role': '참여자',
+          'instruments': ['기타'],
+          'isOnline': true,
+          'joinTime': '1시간 전',
+        },
+        {
+          'id': 3,
+          'name': 'PianoLover',
+          'avatar': '🎹',
+          'role': '참여자',
+          'instruments': ['피아노'],
+          'isOnline': false,
+          'joinTime': '30분 전',
+        },
+      ],
     },
     {
       'id': 2,
       'title': '락 밴드 오디션',
       'genre': '락',
       'instruments': '기타, 베이스, 드럼, 보컬',
-      'participants': 5,
+      'participants': 5, // participantsList.length와 동기화됨 
       'maxParticipants': 6,
       'status': '진행 중',
       'createdBy': 'GuitarHero3',
@@ -86,13 +121,60 @@ class _JamCreationTabState extends State<JamCreationTab> {
         {'user': 'GuitarHero3', 'message': '기타 리프 업로드했어요!', 'time': '5분 전'},
         {'user': 'Drummer5', 'message': '드럼 패턴도 올렸습니다', 'time': '3분 전'},
       ],
+      'participantsList': [
+        {
+          'id': 1,
+          'name': 'GuitarHero3',
+          'avatar': '🎸',
+          'role': '방장',
+          'instruments': ['기타', '베이스'],
+          'isOnline': true,
+          'joinTime': '1일 전',
+        },
+        {
+          'id': 2,
+          'name': 'Drummer5',
+          'avatar': '🥁',
+          'role': '참여자',
+          'instruments': ['드럼'],
+          'isOnline': true,
+          'joinTime': '20시간 전',
+        },
+        {
+          'id': 3,
+          'name': 'BassPlayer1',
+          'avatar': '🎵',
+          'role': '참여자',
+          'instruments': ['베이스'],
+          'isOnline': false,
+          'joinTime': '18시간 전',
+        },
+        {
+          'id': 4,
+          'name': 'VocalStar',
+          'avatar': '🎤',
+          'role': '참여자',
+          'instruments': ['보컬'],
+          'isOnline': true,
+          'joinTime': '12시간 전',
+        },
+        {
+          'id': 5,
+          'name': 'RockFan99',
+          'avatar': '🤘',
+          'role': '참여자',
+          'instruments': ['기타'],
+          'isOnline': false,
+          'joinTime': '10시간 전',
+        },
+      ],
     },
     {
       'id': 3,
       'title': '클래식 듀오',
       'genre': '클래식',
       'instruments': '피아노, 바이올린',
-      'participants': 2,
+      'participants': 2, // participantsList.length와 동기화됨
       'maxParticipants': 2,
       'status': '완료',
       'createdBy': 'Pianist4',
@@ -109,6 +191,26 @@ class _JamCreationTabState extends State<JamCreationTab> {
         {'user': 'Pianist4', 'message': '연주 영상 업로드 완료!', 'time': '1일 전'},
         {'user': 'Violinist6', 'message': '정말 아름다운 연주였어요', 'time': '1일 전'},
       ],
+      'participantsList': [
+        {
+          'id': 1,
+          'name': 'Pianist4',
+          'avatar': '🎹',
+          'role': '방장',
+          'instruments': ['피아노'],
+          'isOnline': false,
+          'joinTime': '3일 전',
+        },
+        {
+          'id': 2,
+          'name': 'Violinist6',
+          'avatar': '🎻',
+          'role': '참여자',
+          'instruments': ['바이올린'],
+          'isOnline': false,
+          'joinTime': '3일 전',
+        },
+      ],
     },
   ];
 
@@ -118,7 +220,51 @@ class _JamCreationTabState extends State<JamCreationTab> {
   @override
   void initState() {
     super.initState();
+    _initializeJamData();
     _startRealtimeUpdates();
+  }
+
+  /// 잼 데이터 초기화 (ListView 안전성 보장)
+  void _initializeJamData() {
+    try {
+      final currentJamSessions = _appStateManager.jamState['jamSessions'] as List<Map<String, dynamic>>?;
+      if (currentJamSessions == null || currentJamSessions.isEmpty) {
+        // 최초 실행 시 기본 더미 데이터 사용
+        _recentJamSessions = List<Map<String, dynamic>>.from(_defaultJamSessions);
+        _appStateManager.updateValue('jam', 'jamSessions', _recentJamSessions);
+        print('🎵 잼 탭: 기본 데이터 초기화 완료 (${_recentJamSessions.length}개 세션)');
+      } else {
+        // 기존 데이터 로드
+        _recentJamSessions = List<Map<String, dynamic>>.from(currentJamSessions);
+        print('🎵 잼 탭: 기존 데이터 로드 완료 (${_recentJamSessions.length}개 세션)');
+      }
+    } catch (e) {
+      print('❌ 잼 데이터 초기화 실패: $e');
+      // 안전한 폴백: 기본 데이터 사용
+      _recentJamSessions = List<Map<String, dynamic>>.from(_defaultJamSessions);
+    }
+  }
+
+  /// 잼 세션 데이터 저장
+  void _saveJamSessions() {
+    _appStateManager.updateValue('jam', 'jamSessions', _recentJamSessions);
+    print('💾 잼 세션 데이터 저장 완료: ${_recentJamSessions.length}개');
+  }
+
+  /// AppStateManager에서 데이터 동기화 (탭 재진입 시)
+  void _syncDataFromAppStateManager() {
+    try {
+      final currentJamSessions = _appStateManager.jamState['jamSessions'] as List<Map<String, dynamic>>?;
+      if (currentJamSessions != null && currentJamSessions.isNotEmpty) {
+        // 현재 데이터와 다르면 동기화
+        if (_recentJamSessions.length != currentJamSessions.length) {
+          _recentJamSessions = List<Map<String, dynamic>>.from(currentJamSessions);
+          print('🔄 잼 탭: AppStateManager와 데이터 동기화 완료 (${_recentJamSessions.length}개 세션)');
+        }
+      }
+    } catch (e) {
+      print('⚠️ 데이터 동기화 실패: $e');
+    }
   }
 
   @override
@@ -129,7 +275,16 @@ class _JamCreationTabState extends State<JamCreationTab> {
     _instrumentsController.dispose();
     _descriptionController.dispose();
     _maxParticipantsController.dispose();
+    // 종료 시 최종 저장
+    _saveJamSessions();
     super.dispose();
+  }
+
+  @override
+  void deactivate() {
+    // 탭 전환 시에도 저장
+    _saveJamSessions();
+    super.deactivate();
   }
 
   /// 실시간 업데이트 시작
@@ -141,17 +296,43 @@ class _JamCreationTabState extends State<JamCreationTab> {
     });
   }
 
-  /// Jam 업데이트 시뮬레이션
+  /// Jam 업데이트 시뮬레이션 (participantsList 동기화)
   void _simulateJamUpdates() {
     final random = DateTime.now().millisecondsSinceEpoch % _recentJamSessions.length;
     if (random < _recentJamSessions.length) {
       setState(() {
         final jam = _recentJamSessions[random];
-        if (jam['status'] == '모집 중' && jam['participants'] < jam['maxParticipants']) {
-          jam['participants'] = (jam['participants'] ?? 0) + 1;
-          if (jam['participants'] >= jam['maxParticipants']) {
+        final participantsList = List<Map<String, dynamic>>.from(jam['participantsList'] ?? []);
+        
+        if (jam['status'] == '모집 중' && participantsList.length < jam['maxParticipants']) {
+          // 🔄 동적 참여자 추가 (시뮬레이션)
+          final dummyNames = ['MusicLover', 'JamFan', 'Guitarist99', 'Drummer2', 'Singer5'];
+          final dummyAvatars = ['🎵', '🎶', '🎸', '🥁', '🎤'];
+          final dummyInstruments = [
+            ['기타'], ['피아노'], ['드럼'], ['베이스'], ['보컬']
+          ];
+          
+          final newIndex = participantsList.length % dummyNames.length;
+          
+          participantsList.add({
+            'id': participantsList.length + 1,
+            'name': '${dummyNames[newIndex]}${DateTime.now().millisecond}',
+            'avatar': dummyAvatars[newIndex],
+            'role': '참여자',
+            'instruments': dummyInstruments[newIndex],
+            'isOnline': true,
+            'joinTime': '방금 전',
+          });
+          
+          // 잼 세션 업데이트
+          jam['participantsList'] = participantsList;
+          jam['participants'] = participantsList.length;
+          
+          if (participantsList.length >= jam['maxParticipants']) {
             jam['status'] = '진행 중';
           }
+          
+          print('🔄 시뮬레이션: ${jam['title']} 참여자 ${participantsList.length}명');
         }
       });
     }
@@ -416,20 +597,53 @@ class _JamCreationTabState extends State<JamCreationTab> {
     );
   }
 
-  /// 참여 신청 제출
+  /// 참여 신청 제출 (시뮬레이션: 즉시 승인)
   void _submitJoinRequest(Map<String, dynamic> jamSession) {
-    // 참여 신청 상태 업데이트
+    // 🔄 실제 participantsList 업데이트
+    final participantsList = List<Map<String, dynamic>>.from(jamSession['participantsList'] ?? []);
+    final currentUser = AuthStateManager.instance.userName;
+    
+    // 이미 참여한 사용자인지 확인
+    final isAlreadyJoined = participantsList.any((p) => p['name'] == currentUser);
+    
+    if (isAlreadyJoined) {
+      _showSuccessDialog('이미 참여한 세션입니다! 🎵');
+      return;
+    }
+    
+    // 최대 참여자 수 확인
+    if (participantsList.length >= jamSession['maxParticipants']) {
+      _showSuccessDialog('참여자가 가득 찼습니다. 😔');
+      return;
+    }
+    
     setState(() {
-      _pendingJoinRequests.add({
-        'jamId': jamSession['id'],
-        'jamTitle': jamSession['title'],
-        'hostName': jamSession['createdBy'],
-        'requestTime': DateTime.now(),
-        'status': 'pending', // pending, approved, rejected
+      // 1. participantsList에 새 참여자 추가
+      participantsList.add({
+        'id': participantsList.length + 1,
+        'name': currentUser,
+        'avatar': '👤',
+        'role': '참여자',
+        'instruments': ['기타'], // 기본값
+        'isOnline': true,
+        'joinTime': '방금 전',
       });
+      
+      // 2. jamSession 업데이트
+      jamSession['participantsList'] = participantsList;
+      jamSession['participants'] = participantsList.length;
+      
+      // 3. 최대 인원 도달 시 상태 변경
+      if (participantsList.length >= jamSession['maxParticipants']) {
+        jamSession['status'] = '진행 중';
+      }
+      
+      print('✅ 잼 참여 완료: ${jamSession['title']}');
+      print('✅ 새로운 참여자 수: ${participantsList.length}/${jamSession['maxParticipants']}');
     });
+    _saveJamSessions();
 
-    _showSuccessDialog('참여 신청이 완료되었습니다! 방장의 승인을 기다려주세요. 🙏');
+    _showSuccessDialog('잼 세션에 참여했습니다! 🎵');
   }
 
   /// 성공 다이얼로그
@@ -1079,11 +1293,24 @@ class _JamCreationTabState extends State<JamCreationTab> {
           'mediaData': _uploadedMediaData,
           'mediaType': _uploadedMediaType,
           'chat': [],
+          // 🔄 동적 participants 리스트 추가
+          'participantsList': [
+            {
+              'id': 1,
+              'name': AuthStateManager.instance.userName,
+              'avatar': '👤',
+              'role': '방장',
+              'instruments': ['기타', '피아노'],
+              'isOnline': true,
+              'joinTime': '방금 전',
+            }
+          ],
         };
 
         setState(() {
           _recentJamSessions.insert(0, newJamSession);
         });
+        _saveJamSessions();
 
         // 폼 초기화
         _titleController.clear();
@@ -1097,14 +1324,21 @@ class _JamCreationTabState extends State<JamCreationTab> {
 
         Navigator.of(context).pop(); // 모달 닫기
 
+        print('✅ 잼 세션 생성 완료 - UI 업데이트 중...');
+        
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Jam 세션이 생성되었습니다!'),
             backgroundColor: AppTheme.accentPink,
           ),
         );
+        
+        print('✅ 잼 세션 생성 완료 - 모든 UI 업데이트 완료');
       }
     } catch (e) {
+      print('❌ 잼 세션 생성 중 오류: $e');
+      print('❌ 스택 트레이스: ${StackTrace.current}');
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1122,13 +1356,32 @@ class _JamCreationTabState extends State<JamCreationTab> {
     }
   }
 
+  /// 사용자 프로필 보기
   void _showUserProfile(String username) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => UserProfileScreen(username: username),
-      ),
-    );
+    try {
+      // 로그인 상태 확인
+      if (AuthStateManager.instance.requiresLogin) {
+        AuthStateManager.instance.showLoginRequiredMessage(context);
+        return;
+      }
+
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => UserProfileScreen(
+            username: username,
+            userAvatar: username == AuthStateManager.instance.userName ? '나' : '👤',
+          ),
+        ),
+      );
+    } catch (e) {
+      print('❌ 사용자 프로필 화면 오류: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('프로필 화면을 불러올 수 없습니다: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   /// Jam 세션 상세 보기
@@ -1146,36 +1399,12 @@ class _JamCreationTabState extends State<JamCreationTab> {
 
   /// Jam 세션 상세 모달
   Widget _buildJamDetailsModal(Map<String, dynamic> jamSession) {
-    // 시뮬레이션된 참여자 데이터
-    final List<Map<String, dynamic>> participants = [
-      {
-        'id': 1,
-        'name': jamSession['createdBy'],
-        'avatar': '👤',
-        'role': '방장',
-        'instruments': ['기타', '피아노'],
-        'isOnline': true,
-        'joinTime': '방금 전',
-      },
-      {
-        'id': 2,
-        'name': 'GuitarHero3',
-        'avatar': '🎸',
-        'role': '참여자',
-        'instruments': ['기타'],
-        'isOnline': true,
-        'joinTime': '5분 전',
-      },
-      {
-        'id': 3,
-        'name': 'Drummer5',
-        'avatar': '🥁',
-        'role': '참여자',
-        'instruments': ['드럼'],
-        'isOnline': false,
-        'joinTime': '10분 전',
-      },
-    ];
+    // 🔄 동적 참여자 데이터 사용
+    final List<Map<String, dynamic>> participants = 
+        List<Map<String, dynamic>>.from(jamSession['participantsList'] ?? []);
+    
+    print('✅ 잼 세션 ${jamSession['title']} 참여자 수: ${participants.length}');
+    print('✅ 잼 세션 participants 숫자: ${jamSession['participants']}');
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.9,
@@ -1218,7 +1447,7 @@ class _JamCreationTabState extends State<JamCreationTab> {
               ),
               const SizedBox(width: 12),
               Text(
-                '${jamSession['participants']}/${jamSession['maxParticipants']} 참여',
+                '${participants.length}/${jamSession['maxParticipants']} 참여',
                 style: const TextStyle(color: AppTheme.grey),
               ),
             ],
@@ -1363,7 +1592,7 @@ class _JamCreationTabState extends State<JamCreationTab> {
               itemCount: participants.length,
               itemBuilder: (context, index) {
                 final participant = participants[index];
-                return _buildParticipantCard(participant);
+                return _buildParticipantCard(participant, jamSession: jamSession);
               },
             ),
           ),
@@ -1478,34 +1707,55 @@ class _JamCreationTabState extends State<JamCreationTab> {
               ),
             ),
           ],
+
+          // 🚪 참여자 나가기/내보내기 버튼들
+          const SizedBox(height: 16),
+          _buildParticipantActionButtons(jamSession),
         ],
       ),
     );
   }
 
-  /// 참여자 카드 위젯
-  Widget _buildParticipantCard(Map<String, dynamic> participant) {
+  /// 참여자 카드 위젯 (길게 누르기로 내보내기 지원)
+  Widget _buildParticipantCard(Map<String, dynamic> participant, {Map<String, dynamic>? jamSession}) {
+    final currentUser = AuthStateManager.instance.userName;
+    final isCurrentUser = participant['name'] == currentUser;
+    final isHost = participant['role'] == '방장';
+    final canKick = jamSession != null && 
+                   !isCurrentUser && 
+                   !isHost && 
+                   jamSession['participantsList'].any((p) => p['name'] == currentUser && p['role'] == '방장');
+    
     return Card(
       color: AppTheme.primaryBlack,
       margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: Stack(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onLongPress: canKick ? () => _kickParticipant(jamSession!, participant) : null,
+        child: ListTile(
+          leading: Stack(
           children: [
-            CircleAvatar(
-              radius: 20,
-              backgroundColor: AppTheme.accentPink,
-              backgroundImage: participant['name'] == AuthStateManager.instance.userName && 
-                              AuthStateManager.instance.profileImageBytes != null
-                  ? MemoryImage(AuthStateManager.instance.profileImageBytes!)
-                  : null,
-              child: participant['name'] == AuthStateManager.instance.userName && 
-                     AuthStateManager.instance.profileImageBytes != null
-                  ? null
-                  : Text(
+            // ProfileImageManager를 사용한 프로필 이미지 표시
+            participant['name'] == AuthStateManager.instance.userName
+                ? ProfileImageManager.instance.buildProfileImage(
+                    radius: 20,
+                    placeholder: CircleAvatar(
+                      radius: 20,
+                      backgroundColor: AppTheme.accentPink,
+                      child: Text(
+                        participant['avatar'],
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                    ),
+                  )
+                : CircleAvatar(
+                    radius: 20,
+                    backgroundColor: AppTheme.accentPink,
+                    child: Text(
                       participant['avatar'],
                       style: const TextStyle(fontSize: 16),
                     ),
-            ),
+                  ),
             if (participant['isOnline'])
               Positioned(
                 right: 0,
@@ -1522,7 +1772,7 @@ class _JamCreationTabState extends State<JamCreationTab> {
               ),
           ],
         ),
-        title: Row(
+          title: Row(
           children: [
             Text(
               participant['name'],
@@ -1549,7 +1799,7 @@ class _JamCreationTabState extends State<JamCreationTab> {
             ),
           ],
         ),
-        subtitle: Column(
+          subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
@@ -1562,12 +1812,25 @@ class _JamCreationTabState extends State<JamCreationTab> {
             ),
           ],
         ),
-        trailing: IconButton(
-          onPressed: () {
-            Navigator.of(context).pop();
-            _showUserProfile(participant['name']);
-          },
-          icon: const Icon(Icons.person, color: AppTheme.accentPink),
+          trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 내보내기 가능한 참여자 표시
+            if (canKick)
+              const Icon(
+                Icons.touch_app,
+                color: AppTheme.grey,
+                size: 16,
+              ),
+            IconButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _showUserProfile(participant['name']);
+              },
+              icon: const Icon(Icons.person, color: AppTheme.accentPink),
+            ),
+          ],
+        ),
         ),
       ),
     );
@@ -1704,14 +1967,27 @@ class _JamCreationTabState extends State<JamCreationTab> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!isMe) ...[
-            CircleAvatar(
-              radius: 16,
-              backgroundColor: AppTheme.accentPink,
-              child: Text(
-                message['user'][0],
-                style: const TextStyle(color: AppTheme.white, fontSize: 12),
-              ),
-            ),
+            // ProfileImageManager를 사용한 프로필 이미지 표시
+            message['user'] == AuthStateManager.instance.userName
+                ? ProfileImageManager.instance.buildProfileImage(
+                    radius: 16,
+                    placeholder: CircleAvatar(
+                      radius: 16,
+                      backgroundColor: AppTheme.accentPink,
+                      child: Text(
+                        message['user'][0],
+                        style: const TextStyle(color: AppTheme.white, fontSize: 12),
+                      ),
+                    ),
+                  )
+                : CircleAvatar(
+                    radius: 16,
+                    backgroundColor: AppTheme.accentPink,
+                    child: Text(
+                      message['user'][0],
+                      style: const TextStyle(color: AppTheme.white, fontSize: 12),
+                    ),
+                  ),
             const SizedBox(width: 8),
           ],
           Flexible(
@@ -1755,12 +2031,16 @@ class _JamCreationTabState extends State<JamCreationTab> {
           ),
           if (isMe) ...[
             const SizedBox(width: 8),
-            CircleAvatar(
+            // ProfileImageManager를 사용한 프로필 이미지 표시
+            ProfileImageManager.instance.buildProfileImage(
               radius: 16,
-              backgroundColor: AppTheme.accentPink,
-              child: Text(
-                message['user'][0],
-                style: const TextStyle(color: AppTheme.white, fontSize: 12),
+              placeholder: CircleAvatar(
+                radius: 16,
+                backgroundColor: AppTheme.accentPink,
+                child: Text(
+                  message['user'][0],
+                  style: const TextStyle(color: AppTheme.white, fontSize: 12),
+                ),
               ),
             ),
           ],
@@ -1901,7 +2181,15 @@ class _JamCreationTabState extends State<JamCreationTab> {
   }
 
   @override
+  bool get wantKeepAlive => true;
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context); // AutomaticKeepAliveClientMixin 필수
+    
+    // 탭 재진입 시 데이터 동기화 (안전장치)
+    _syncDataFromAppStateManager();
+    
     final filteredSessions = _filterJamSessions();
     
     return Scaffold(
@@ -2044,6 +2332,10 @@ class _JamCreationTabState extends State<JamCreationTab> {
   }
 
   Widget _buildJamSessionCard(BuildContext context, Map<String, dynamic> jamSession) {
+    // 🔄 동적 참여자 수 계산
+    final participantsList = List<Map<String, dynamic>>.from(jamSession['participantsList'] ?? []);
+    final actualParticipants = participantsList.length;
+    
     return Card(
       color: AppTheme.secondaryBlack,
       margin: const EdgeInsets.only(bottom: 12),
@@ -2057,11 +2349,20 @@ class _JamCreationTabState extends State<JamCreationTab> {
               children: [
                 GestureDetector(
                   onTap: () => _showUserProfile(jamSession['createdBy']),
-                  child: CircleAvatar(
-                    radius: 20,
-                    backgroundColor: AppTheme.accentPink,
-                    child: const Icon(Icons.person, color: AppTheme.white, size: 20),
-                  ),
+                  child: jamSession['createdBy'] == AuthStateManager.instance.userName
+                      ? ProfileImageManager.instance.buildProfileImage(
+                          radius: 20,
+                          placeholder: CircleAvatar(
+                            radius: 20,
+                            backgroundColor: AppTheme.accentPink,
+                            child: const Icon(Icons.person, color: AppTheme.white, size: 20),
+                          ),
+                        )
+                      : CircleAvatar(
+                          radius: 20,
+                          backgroundColor: AppTheme.accentPink,
+                          child: const Icon(Icons.person, color: AppTheme.white, size: 20),
+                        ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -2146,7 +2447,7 @@ class _JamCreationTabState extends State<JamCreationTab> {
                 Icon(Icons.people, size: 16, color: AppTheme.grey),
                 const SizedBox(width: 4),
                 Text(
-                  '${jamSession['participants']}/${jamSession['maxParticipants']} 참여',
+                  '$actualParticipants/${jamSession['maxParticipants']} 참여',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: AppTheme.grey,
                   ),
@@ -2189,6 +2490,254 @@ class _JamCreationTabState extends State<JamCreationTab> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // 🚪 ========== 참여자 나가기/내보내기 기능 ==========
+
+  /// 참여자 액션 버튼들 (나가기/내보내기)
+  Widget _buildParticipantActionButtons(Map<String, dynamic> jamSession) {
+    final currentUser = AuthStateManager.instance.userName;
+    final participantsList = List<Map<String, dynamic>>.from(jamSession['participantsList'] ?? []);
+    
+    // 현재 사용자가 참여자인지 확인
+    final currentParticipant = participantsList.firstWhere(
+      (p) => p['name'] == currentUser,
+      orElse: () => <String, dynamic>{},
+    );
+    
+    final isParticipant = currentParticipant.isNotEmpty;
+    final isHost = isParticipant && currentParticipant['role'] == '방장';
+    
+    if (!isParticipant) {
+      return const SizedBox.shrink(); // 참여자가 아니면 버튼 숨김
+    }
+    
+    return Column(
+      children: [
+        // 참여자 나가기 버튼 (방장이 아닌 경우에만)
+        if (!isHost) ...[
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => _leaveJamSession(jamSession),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.red,
+                side: const BorderSide(color: Colors.red),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              icon: const Icon(Icons.exit_to_app, color: Colors.red),
+              label: const Text(
+                '세션 나가기',
+                style: TextStyle(color: Colors.red),
+              ),
+            ),
+          ),
+        ],
+        
+        // 방장 전용: 참여자 관리 안내
+        if (isHost) ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryBlack,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppTheme.accentPink.withValues(alpha: 0.3)),
+            ),
+            child: Column(
+              children: [
+                const Icon(
+                  Icons.admin_panel_settings,
+                  color: AppTheme.accentPink,
+                  size: 24,
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  '방장 권한',
+                  style: TextStyle(
+                    color: AppTheme.accentPink,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  '참여자 목록에서 각 참여자를 길게 눌러서 내보내기할 수 있습니다.',
+                  style: TextStyle(
+                    color: AppTheme.grey,
+                    fontSize: 12,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// 참여자 자진 나가기
+  void _leaveJamSession(Map<String, dynamic> jamSession) {
+    final currentUser = AuthStateManager.instance.userName;
+    final participantsList = List<Map<String, dynamic>>.from(jamSession['participantsList'] ?? []);
+    
+    // 현재 사용자가 참여자인지 확인
+    final participantIndex = participantsList.indexWhere((p) => p['name'] == currentUser);
+    if (participantIndex == -1) {
+      _showErrorDialog('참여하지 않은 세션입니다.');
+      return;
+    }
+    
+    // 방장은 나갈 수 없음
+    final participant = participantsList[participantIndex];
+    if (participant['role'] == '방장') {
+      _showErrorDialog('방장은 세션을 나갈 수 없습니다. 세션을 삭제하거나 방장을 위임해주세요.');
+      return;
+    }
+    
+    // 확인 다이얼로그 표시
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.secondaryBlack,
+        title: const Text('세션 나가기', style: TextStyle(color: AppTheme.white)),
+        content: Text(
+          '정말로 "${jamSession['title']}" 세션에서 나가시겠습니까?',
+          style: const TextStyle(color: AppTheme.white),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('취소', style: TextStyle(color: AppTheme.grey)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _executeLeaveJamSession(jamSession, participantIndex);
+            },
+            child: const Text('나가기', style: TextStyle(color: AppTheme.accentPink)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 참여자 나가기 실행
+  void _executeLeaveJamSession(Map<String, dynamic> jamSession, int participantIndex) {
+    setState(() {
+      final participantsList = List<Map<String, dynamic>>.from(jamSession['participantsList'] ?? []);
+      final leavingParticipant = participantsList[participantIndex];
+      
+      // participantsList에서 제거
+      participantsList.removeAt(participantIndex);
+      
+      // 카운트 업데이트
+      jamSession['participantsList'] = participantsList;
+      jamSession['participants'] = participantsList.length;
+      
+      // 상태 업데이트 (모집 중으로 변경 가능)
+      if (jamSession['status'] == '진행 중' && participantsList.length < jamSession['maxParticipants']) {
+        jamSession['status'] = '모집 중';
+      }
+      
+      print('🚪 참여자 나가기 완료: ${leavingParticipant['name']} (남은 인원: ${participantsList.length}명)');
+    });
+    _saveJamSessions();
+    
+    _showSuccessDialog('세션에서 나갔습니다.');
+  }
+
+  /// 방장의 참여자 내보내기
+  void _kickParticipant(Map<String, dynamic> jamSession, Map<String, dynamic> participant) {
+    final currentUser = AuthStateManager.instance.userName;
+    final participantsList = List<Map<String, dynamic>>.from(jamSession['participantsList'] ?? []);
+    
+    // 현재 사용자가 방장인지 확인
+    final isHost = participantsList.any((p) => p['name'] == currentUser && p['role'] == '방장');
+    if (!isHost) {
+      _showErrorDialog('방장만 참여자를 내보낼 수 있습니다.');
+      return;
+    }
+    
+    // 자기 자신을 내보낼 수 없음
+    if (participant['name'] == currentUser) {
+      _showErrorDialog('자기 자신을 내보낼 수 없습니다.');
+      return;
+    }
+    
+    // 방장을 내보낼 수 없음
+    if (participant['role'] == '방장') {
+      _showErrorDialog('다른 방장을 내보낼 수 없습니다.');
+      return;
+    }
+    
+    // 확인 다이얼로그 표시
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.secondaryBlack,
+        title: const Text('참여자 내보내기', style: TextStyle(color: AppTheme.white)),
+        content: Text(
+          '정말로 "${participant['name']}"님을 세션에서 내보내시겠습니까?',
+          style: const TextStyle(color: AppTheme.white),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('취소', style: TextStyle(color: AppTheme.grey)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _executeKickParticipant(jamSession, participant);
+            },
+            child: const Text('내보내기', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 참여자 내보내기 실행
+  void _executeKickParticipant(Map<String, dynamic> jamSession, Map<String, dynamic> participant) {
+    setState(() {
+      final participantsList = List<Map<String, dynamic>>.from(jamSession['participantsList'] ?? []);
+      
+      // participantsList에서 제거
+      participantsList.removeWhere((p) => p['name'] == participant['name']);
+      
+      // 카운트 업데이트
+      jamSession['participantsList'] = participantsList;
+      jamSession['participants'] = participantsList.length;
+      
+      // 상태 업데이트 (모집 중으로 변경 가능)
+      if (jamSession['status'] == '진행 중' && participantsList.length < jamSession['maxParticipants']) {
+        jamSession['status'] = '모집 중';
+      }
+      
+      print('👑 참여자 내보내기 완료: ${participant['name']} (남은 인원: ${participantsList.length}명)');
+    });
+    _saveJamSessions();
+    
+    _showSuccessDialog('${participant['name']}님을 내보냈습니다.');
+  }
+
+  /// 에러 다이얼로그 표시
+  void _showErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.secondaryBlack,
+        title: const Text('알림', style: TextStyle(color: AppTheme.white)),
+        content: Text(message, style: const TextStyle(color: AppTheme.white)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('확인', style: TextStyle(color: AppTheme.accentPink)),
+          ),
+        ],
       ),
     );
   }

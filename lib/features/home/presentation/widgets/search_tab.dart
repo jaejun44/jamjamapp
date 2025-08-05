@@ -1,7 +1,9 @@
+import 'dart:collection';
 import 'package:flutter/material.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
 import 'package:jamjamapp/core/services/search_service.dart';
 import 'package:jamjamapp/core/services/auth_state_manager.dart';
+import 'package:jamjamapp/core/services/profile_image_manager.dart';
 import 'user_profile_screen.dart';
 import 'dart:async';
 
@@ -26,9 +28,9 @@ class _SearchTabState extends State<SearchTab> {
   Timer? _suggestionDebounceTimer;
   
   // 필터 상태 관리
-  Set<String> _selectedGenres = {};
-  Set<String> _selectedInstruments = {};
-  Set<String> _selectedLocations = {};
+  Set<String> _selectedGenres = LinkedHashSet<String>();
+  Set<String> _selectedInstruments = LinkedHashSet<String>();
+  Set<String> _selectedLocations = LinkedHashSet<String>();
   String _sortBy = 'relevance'; // 'relevance', 'name', 'followers', 'recent', 'posts'
   String _sortOrder = 'desc'; // 'asc', 'desc'
   
@@ -40,7 +42,7 @@ class _SearchTabState extends State<SearchTab> {
   
   // 검색 히스토리
   List<String> _searchHistory = [];
-  Set<String> _favoriteSearches = {};
+  Set<String> _favoriteSearches = LinkedHashSet<String>();
   List<String> _searchSuggestions = [];
   
   // 페이지네이션
@@ -54,7 +56,7 @@ class _SearchTabState extends State<SearchTab> {
   List<Map<String, dynamic>> _displayedMusicians = [];
   
   // 검색 통계
-  Map<String, dynamic> _searchStats = {};
+  Map<String, dynamic> _searchStats = LinkedHashMap<String, dynamic>();
   
   // 에러 상태
   String? _errorMessage;
@@ -745,10 +747,17 @@ class _SearchTabState extends State<SearchTab> {
               child: CircleAvatar(
                 radius: 30,
                 backgroundColor: AppTheme.accentPink,
-                child: Text(
-                  musician['avatar'],
-                  style: const TextStyle(fontSize: 24),
-                ),
+                backgroundImage: musician['name'] == AuthStateManager.instance.userName && 
+                                AuthStateManager.instance.profileImageBytes != null
+                    ? MemoryImage(AuthStateManager.instance.profileImageBytes!)
+                    : null,
+                child: musician['name'] == AuthStateManager.instance.userName && 
+                       AuthStateManager.instance.profileImageBytes != null
+                    ? null
+                    : Text(
+                        musician['avatar'],
+                        style: const TextStyle(fontSize: 24),
+                      ),
               ),
             ),
             if (musician['isOnline'])

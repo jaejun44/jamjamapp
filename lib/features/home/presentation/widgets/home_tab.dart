@@ -1,6 +1,12 @@
+import 'dart:collection';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
 import 'package:jamjamapp/core/services/app_state_manager.dart';
+import 'package:jamjamapp/core/services/auth_state_manager.dart';
+import 'package:jamjamapp/core/services/comment_service.dart';
+import 'package:jamjamapp/core/services/profile_image_manager.dart';
+import 'package:jamjamapp/core/services/counter_service.dart';
 import 'comment_modal.dart';
 import 'file_upload_modal.dart';
 import 'user_profile_screen.dart';
@@ -13,8 +19,6 @@ import 'report_modal.dart';
 import 'dart:async';
 import 'package:jamjamapp/core/services/recommendation_service.dart';
 import 'package:jamjamapp/core/services/offline_service.dart';
-import 'package:jamjamapp/core/services/auth_state_manager.dart';
-import 'package:jamjamapp/core/services/comment_service.dart';
 
 class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
@@ -50,10 +54,63 @@ class _HomeTabState extends State<HomeTab> {
   final List<String> _genres = ['전체', '재즈', '팝', '락', '클래식', '일렉트로닉'];
   final List<String> _mediaTypes = ['전체', '비디오', '오디오', '이미지', '텍스트'];
 
-  // AppStateManager에서 상태를 가져오는 getter 메서드들
-  Map<int, bool> get _likedFeeds => Map<int, bool>.from(_appStateManager.homeState['likedFeeds'] ?? {});
-  Map<int, bool> get _savedFeeds => Map<int, bool>.from(_appStateManager.homeState['savedFeeds'] ?? {});
-  Set<String> get _followedUsers => Set<String>.from(_appStateManager.homeState['followedUsers'] ?? {});
+  // 기본값 상수 정의 - 수정: Map은 생성자, List는 리터럴
+  static final Map<int, bool> _emptyLikedFeeds = Map<int, bool>(); // 🔧 리터럴 대신 생성자 사용
+  static final Map<int, bool> _emptySavedFeeds = Map<int, bool>(); // 🔧 리터럴 대신 생성자 사용
+  static final List<String> _emptyFollowedUsers = <String>[]; // 🔧 List 리터럴은 안전함
+
+  // AppStateManager에서 상태를 가져오는 getter 메서드들 - ChatGPT-4o 권장
+  Map<int, bool> get _likedFeeds {
+    final rawData = _appStateManager.homeState['likedFeeds'];
+    if (rawData is Map) {
+      try {
+        // JSON에서 복원된 Map<String, dynamic>을 Map<int, bool>로 변환
+        final Map<int, bool> convertedMap = Map<int, bool>();
+        rawData.forEach((key, value) {
+          final intKey = key is String ? int.tryParse(key) ?? 0 : key as int;
+          final boolValue = value is bool ? value : false;
+          convertedMap[intKey] = boolValue;
+        });
+        return convertedMap;
+      } catch (e) {
+        print('⚠️ _likedFeeds 타입 변환 실패: $e');
+        return _emptyLikedFeeds;
+      }
+    }
+    return _emptyLikedFeeds;
+  }
+  
+  Map<int, bool> get _savedFeeds {
+    final rawData = _appStateManager.homeState['savedFeeds'];
+    if (rawData is Map) {
+      try {
+        // JSON에서 복원된 Map<String, dynamic>을 Map<int, bool>로 변환
+        final Map<int, bool> convertedMap = Map<int, bool>();
+        rawData.forEach((key, value) {
+          final intKey = key is String ? int.tryParse(key) ?? 0 : key as int;
+          final boolValue = value is bool ? value : false;
+          convertedMap[intKey] = boolValue;
+        });
+        return convertedMap;
+      } catch (e) {
+        print('⚠️ _savedFeeds 타입 변환 실패: $e');
+        return _emptySavedFeeds;
+      }
+    }
+    return _emptySavedFeeds;
+  }
+  List<String> get _followedUsers {
+    final rawData = _appStateManager.homeState['followedUsers'];
+    if (rawData is List) {
+      try {
+        return rawData.cast<String>();
+      } catch (e) {
+        print('⚠️ _followedUsers 타입 변환 실패: $e');
+        return _emptyFollowedUsers;
+      }
+    }
+    return _emptyFollowedUsers;
+  }
   bool get _isPersonalizedMode => _appStateManager.homeState['isPersonalizedMode'] ?? true;
   bool get _isOfflineMode => _appStateManager.homeState['isOfflineMode'] ?? false;
   bool get _isRealtimeUpdateEnabled => _appStateManager.homeState['isRealtimeUpdateEnabled'] ?? true;
@@ -220,14 +277,28 @@ class _HomeTabState extends State<HomeTab> {
     super.dispose();
   }
 
-  /// 초기 데이터 로드
+  /// 초기 데이터 로드 (CounterService 연동) - 안전한 타입 변환
   void _loadInitialData() {
-    // AppStateManager에서 저장된 피드 데이터 로드
-    final savedFeedData = AppStateManager.instance.getState('home')['feedData'] as List<Map<String, dynamic>>?;
+    // AppStateManager에서 저장된 피드 데이터 로드 - 안전한 타입 변환
+    final rawFeedData = AppStateManager.instance.getState('home')['feedData'];
+    List<Map<String, dynamic>>? savedFeedData;
+    
+    if (rawFeedData is List) {
+      // List<dynamic>을 List<Map<String, dynamic>>로 안전하게 변환
+      try {
+        savedFeedData = rawFeedData.cast<Map<String, dynamic>>();
+        print('🔄 피드 데이터 타입 변환 성공: ${savedFeedData.length}개');
+      } catch (e) {
+        print('❌ 피드 데이터 타입 변환 실패: $e');
+        savedFeedData = null;
+      }
+    }
+    
     if (savedFeedData != null && savedFeedData.isNotEmpty) {
       _feedData = savedFeedData;
       _currentPage = (_feedData.length / _itemsPerPage).ceil();
       _hasMoreData = _allFeedData.length > _feedData.length;
+      print('✅ 저장된 피드 데이터 복원: ${savedFeedData.length}개');
     } else {
       _feedData = _allFeedData.take(_itemsPerPage).toList();
       _currentPage = 1;
@@ -236,11 +307,74 @@ class _HomeTabState extends State<HomeTab> {
       AppStateManager.instance.updateValue('home', 'feedData', _feedData);
     }
     
-    // 댓글 수 업데이트
-    _updateAllCommentCounts();
+    // CounterService에서 실제 카운트 동기화
+    _syncCountsWithCounterService();
+    
+    // 사용자 좋아요 상태 복원
+    _syncUserLikeStates();
   }
 
-  /// 모든 피드의 댓글 수 업데이트
+  /// CounterService와 카운트 동기화
+  void _syncCountsWithCounterService() {
+    for (final feed in _feedData) {
+      final feedId = feed['id'] as int;
+      
+      // CounterService에서 실제 카운트 가져오기
+      final likeCount = CounterService.instance.getCount('likes', feedId);
+      final commentCount = CommentService.instance.getCommentCount(feedId);
+      final shareCount = CounterService.instance.getCount('shares', feedId);
+      
+      // 피드 데이터 업데이트
+      feed['likes'] = likeCount;
+      feed['comments'] = commentCount;
+      feed['shares'] = shareCount;
+      
+      // CounterService에 댓글 카운트 동기화 (CommentService → CounterService)
+      CounterService.instance.updateCommentCount(feedId, commentCount);
+    }
+    
+    // _allFeedData도 동기화
+    for (final feed in _allFeedData) {
+      final feedId = feed['id'] as int;
+      final likeCount = CounterService.instance.getCount('likes', feedId);
+      final commentCount = CommentService.instance.getCommentCount(feedId);
+      final shareCount = CounterService.instance.getCount('shares', feedId);
+      
+      feed['likes'] = likeCount;
+      feed['comments'] = commentCount;
+      feed['shares'] = shareCount;
+    }
+    
+    print('🔄 CounterService와 피드 카운트 동기화 완료');
+  }
+  
+  /// 사용자 좋아요 상태 복원 - ChatGPT-4o 권장
+  void _syncUserLikeStates() {
+    final userId = AuthStateManager.instance.userName;
+    final likedFeedsMap = Map<int, bool>(); // 🔧 리터럴 대신 생성자 사용
+    
+    for (int i = 0; i < _feedData.length; i++) {
+      final feedId = _feedData[i]['id'] as int;
+      final isLiked = CounterService.instance.getUserLikeStatus(userId, feedId);
+      likedFeedsMap[i] = isLiked;
+    }
+    
+    // AppStateManager에 저장
+    _appStateManager.updateValue('home', 'likedFeeds', likedFeedsMap);
+    
+    print('👤 사용자 좋아요 상태 복원 완료: ${likedFeedsMap.length}개');
+    
+    // 🔄 UI 강제 업데이트
+    if (mounted) {
+      setState(() {
+        // AppStateManager의 likedFeeds를 직접 업데이트해서 getter가 새 값을 반환하도록 함
+        _appStateManager.updateValue('home', 'likedFeeds', Map<int, bool>.from(likedFeedsMap));
+      });
+      print('🔄 UI 상태 강제 업데이트 완료');
+    }
+  }
+
+  /// 모든 피드의 댓글 수 업데이트 (레거시 - 호환성 유지)
   void _updateAllCommentCounts() {
     for (final feed in _feedData) {
       final commentCount = CommentService.instance.getCommentCount(feed['id']);
@@ -582,8 +716,8 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  // 좋아요 상태 토글
-  void _toggleLike(int index) {
+  // 좋아요 상태 토글 (CounterService 사용 + 강제 UI 업데이트)
+  void _toggleLike(int index) async {
     // 로그인 상태 확인
     if (AuthStateManager.instance.requiresLogin) {
       AuthStateManager.instance.showLoginRequiredMessage(context);
@@ -591,34 +725,52 @@ class _HomeTabState extends State<HomeTab> {
     }
 
     final feed = _feedData[index];
-    final currentLikedState = _likedFeeds[index] ?? false;
-    final newLikedState = !currentLikedState;
+    final feedId = feed['id'] as int;
+    final userId = AuthStateManager.instance.userName;
     
-    // AppStateManager를 통해 상태 업데이트
-    _appStateManager.updateValue('home', 'likedFeeds', {
-      ..._likedFeeds,
-      index: newLikedState,
-    });
-    
-    // 피드 데이터의 좋아요 카운트 업데이트
-    setState(() {
-      if (newLikedState) {
-        feed['likes'] = (feed['likes'] as int) + 1;
-      } else {
-        feed['likes'] = (feed['likes'] as int) - 1;
-      }
-    });
-    
-    // 사용자 행동 기록
-    _recordUserAction(newLikedState ? 'like' : 'unlike', feed);
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(newLikedState ? '좋아요를 눌렀습니다!' : '좋아요를 취소했습니다.'),
-        backgroundColor: AppTheme.accentPink,
-        duration: const Duration(seconds: 1),
-      ),
-    );
+    try {
+      // CounterService를 통해 좋아요 토글
+      final newLikedState = await CounterService.instance.toggleLike(userId, feedId);
+      final newLikeCount = CounterService.instance.getCount('likes', feedId);
+      
+      print('💖 좋아요 토글 결과: feedId=$feedId, newLikedState=$newLikedState, newCount=$newLikeCount');
+      
+      // 🔥 강제 UI 업데이트 - ChatGPT-4o 권장: 명시적 생성자 사용
+      final currentLikedFeeds = Map<int, bool>.from(_likedFeeds); // 🔧 생성자 사용
+      currentLikedFeeds[index] = newLikedState;
+      
+      setState(() {
+        _feedData[index]['likes'] = newLikeCount;
+      });
+      
+      // AppStateManager를 통해 좋아요 상태 업데이트 (이것이 _likedFeeds getter를 업데이트함)
+      await _appStateManager.updateValue('home', 'likedFeeds', currentLikedFeeds);
+      
+      print('💖 강제 UI 업데이트 완료: index=$index, liked=${_likedFeeds[index]}, count=${_feedData[index]['likes']}');
+      
+      // 피드 데이터만 추가로 저장 (좋아요 상태는 이미 위에서 저장됨)
+      _appStateManager.updateValue('home', 'feedData', _feedData);
+      
+      // 사용자 행동 기록
+      _recordUserAction(newLikedState ? 'like' : 'unlike', _feedData[index]);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(newLikedState ? '❤️ 좋아요!' : '🤍 좋아요 취소'),
+          backgroundColor: AppTheme.accentPink,
+          duration: const Duration(seconds: 1),
+        ),
+      );
+    } catch (e) {
+      print('❌ 좋아요 토글 실패: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('좋아요 처리 중 오류가 발생했습니다.'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   // 저장 상태 토글
@@ -652,8 +804,18 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  /// 새 피드 추가
-  void _addNewFeed(Map<String, dynamic> newFeed) {
+  /// 새 피드 추가 (CounterService 초기화 포함)
+  void _addNewFeed(Map<String, dynamic> newFeed) async {
+    final feedId = newFeed['id'] as int;
+    
+    // CounterService에 초기 카운트 설정
+    await CounterService.instance.initializeFeedCounts(
+      feedId,
+      likes: newFeed['likes'] ?? 0,
+      comments: newFeed['comments'] ?? 0,
+      shares: newFeed['shares'] ?? 0,
+    );
+    
     setState(() {
       _feedData.insert(0, newFeed);
       _allFeedData.insert(0, newFeed);
@@ -669,10 +831,18 @@ class _HomeTabState extends State<HomeTab> {
         duration: Duration(seconds: 2),
       ),
     );
+    
+    print('📝 새 피드 추가 및 CounterService 초기화 완료: feedId=$feedId');
   }
 
   // 피드 추가 모달 표시
   void _showAddFeedModal() {
+    // 🔒 로그인 상태 확인
+    if (AuthStateManager.instance.requiresLogin) {
+      AuthStateManager.instance.showLoginRequiredMessage(context);
+      return;
+    }
+    
     showModalBottomSheet(
       context: context,
       backgroundColor: AppTheme.secondaryBlack,
@@ -809,7 +979,9 @@ class _HomeTabState extends State<HomeTab> {
           _addNewFeed({
             'id': DateTime.now().millisecondsSinceEpoch,
             'author': AuthStateManager.instance.userName,
-            'authorAvatar': '👤',
+            'authorAvatar': AuthStateManager.instance.profileImageBytes != null
+                ? MemoryImage(AuthStateManager.instance.profileImageBytes!)
+                : '👤',
             'title': title,
             'content': content,
             'genre': '일반',
@@ -882,8 +1054,10 @@ class _HomeTabState extends State<HomeTab> {
               if (titleController.text.isNotEmpty && contentController.text.isNotEmpty) {
                 _addNewFeed({
                   'id': DateTime.now().millisecondsSinceEpoch,
-                  'author': '나',
-                  'authorAvatar': '👤',
+                  'author': AuthStateManager.instance.userName,
+                  'authorAvatar': AuthStateManager.instance.profileImageBytes != null
+                      ? MemoryImage(AuthStateManager.instance.profileImageBytes!)
+                      : '👤',
                   'title': titleController.text,
                   'content': contentController.text,
                   'genre': '일반',
@@ -1090,22 +1264,31 @@ class _HomeTabState extends State<HomeTab> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // 작성자 이름 (클릭 가능)
-                      GestureDetector(
-                        onTap: () => _showUserProfile(feed['author']),
-                        child: Text(
-                          feed['author'],
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: AppTheme.white,
-                            fontWeight: FontWeight.bold,
+                      // 작성자 정보
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  feed['author'],
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.white,
+                                  ),
+                                ),
+                                Text(
+                                  feed['timestamp'],
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppTheme.grey,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      ),
-                      Text(
-                        feed['timestamp'],
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: AppTheme.grey,
-                        ),
+                        ],
                       ),
                     ],
                   ),
@@ -1181,10 +1364,13 @@ class _HomeTabState extends State<HomeTab> {
             child: Row(
               children: [
                 _buildActionButton(
-                  icon: _likedFeeds[index] == true ? Icons.favorite : Icons.favorite_border,
+                  icon: (_likedFeeds[index] ?? false) ? Icons.favorite : Icons.favorite_border,
                   label: '${feed['likes']}',
-                  isActive: _likedFeeds[index] == true,
-                  onTap: () => _toggleLike(index),
+                  isActive: _likedFeeds[index] ?? false,
+                  onTap: () {
+                    print('💖 좋아요 버튼 클릭: index=$index, 현재상태=${_likedFeeds[index]}');
+                    _toggleLike(index);
+                  },
                 ),
                 const SizedBox(width: 24),
                 _buildActionButton(
@@ -1237,6 +1423,11 @@ class _HomeTabState extends State<HomeTab> {
     required bool isActive,
     required VoidCallback onTap,
   }) {
+    // 좋아요 버튼인 경우 디버깅 로그
+    if (icon == Icons.favorite || icon == Icons.favorite_border) {
+      print('💖 하트 버튼 빌드: icon=$icon, isActive=$isActive, label=$label');
+    }
+    
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
@@ -1263,10 +1454,14 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  /// 댓글 수 업데이트
-  void _updateCommentCount(int feedId) {
+  /// 댓글 수 업데이트 (CounterService 동기화)
+  void _updateCommentCount(int feedId) async {
+    final commentCount = CommentService.instance.getCommentCount(feedId);
+    
+    // CounterService에 댓글 카운트 업데이트
+    await CounterService.instance.updateCommentCount(feedId, commentCount);
+    
     setState(() {
-      final commentCount = CommentService.instance.getCommentCount(feedId);
       final feedIndex = _feedData.indexWhere((feed) => feed['id'] == feedId);
       if (feedIndex != -1) {
         _feedData[feedIndex]['comments'] = commentCount;
@@ -1277,6 +1472,9 @@ class _HomeTabState extends State<HomeTab> {
         _allFeedData[allFeedIndex]['comments'] = commentCount;
       }
     });
+    
+    // AppStateManager에 업데이트된 피드 데이터 저장
+    AppStateManager.instance.updateValue('home', 'feedData', _feedData);
   }
 
   /// 댓글 모달 표시
@@ -1334,7 +1532,7 @@ class _HomeTabState extends State<HomeTab> {
     });
   }
 
-  /// 공유 모달 표시
+  /// 공유 모달 표시 (공유 후 카운트 업데이트)
   void _showShareModal(Map<String, dynamic> feed) {
     // 로그인 상태 확인
     if (AuthStateManager.instance.requiresLogin) {
@@ -1349,7 +1547,32 @@ class _HomeTabState extends State<HomeTab> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) => ShareModal(feed: feed),
-    );
+    ).then((_) {
+      // 공유 모달이 닫힌 후 공유 카운트 업데이트
+      _updateShareCount(feed['id'] as int);
+    });
+  }
+
+  /// 공유 카운트 업데이트
+  void _updateShareCount(int feedId) {
+    final shareCount = CounterService.instance.getCount('shares', feedId);
+    
+    setState(() {
+      final feedIndex = _feedData.indexWhere((feed) => feed['id'] == feedId);
+      if (feedIndex != -1) {
+        _feedData[feedIndex]['shares'] = shareCount;
+      }
+      
+      final allFeedIndex = _allFeedData.indexWhere((feed) => feed['id'] == feedId);
+      if (allFeedIndex != -1) {
+        _allFeedData[allFeedIndex]['shares'] = shareCount;
+      }
+    });
+    
+    // AppStateManager에 업데이트된 피드 데이터 저장
+    AppStateManager.instance.updateValue('home', 'feedData', _feedData);
+    
+    print('🔗 공유 카운트 업데이트: feedId=$feedId, count=$shareCount');
   }
 
   /// 신고 모달 표시

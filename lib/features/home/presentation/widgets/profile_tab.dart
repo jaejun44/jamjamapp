@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
 import 'package:jamjamapp/core/services/auth_state_manager.dart';
+import 'package:jamjamapp/core/services/profile_image_manager.dart';
 import '../../../auth/presentation/widgets/login_modal.dart';
 import '../../../auth/presentation/widgets/backend_test_modal.dart';
 import 'profile_edit_modal.dart';
@@ -112,10 +113,25 @@ class _ProfileTabState extends State<ProfileTab> {
         onImageChanged: (Uint8List? imageBytes, String? imageName) async {
           print('프로필 탭에서 이미지 변경됨: $imageName'); // 디버깅
           
-          // AuthStateManager를 통해 이미지 저장
-          await AuthStateManager.instance.updateProfileImage(imageBytes, imageName);
-          
-          print('프로필 이미지 상태 업데이트됨: $imageName'); // 디버깅
+          if (imageBytes != null) {
+            try {
+              // ProfileImageManager를 통해 이미지 저장
+              await ProfileImageManager.instance.saveProfileImage(imageBytes);
+              print('ProfileImageManager 저장 완료'); // 디버깅
+              
+              // AuthStateManager를 통해 이미지 업데이트
+              await AuthStateManager.instance.updateProfileImage(imageBytes, imageName);
+              print('AuthStateManager 업데이트 완료'); // 디버깅
+              
+              setState(() {
+                // UI 업데이트
+              });
+              
+              print('프로필 이미지 상태 업데이트됨: $imageName'); // 디버깅
+            } catch (e) {
+              print('❌ 프로필 이미지 저장 실패: $e');
+            }
+          }
         },
         onProfileSaved: (String name, String nickname, String bio, String instruments) async {
           print('프로필 데이터 저장됨: $name, $nickname, $bio, $instruments'); // 디버깅

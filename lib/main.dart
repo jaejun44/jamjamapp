@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
 import 'package:jamjamapp/core/services/supabase_service.dart';
+import 'package:jamjamapp/core/services/profile_image_manager.dart';
 import 'package:jamjamapp/core/services/auth_state_manager.dart';
 import 'package:jamjamapp/core/services/app_state_manager.dart';
+import 'package:jamjamapp/core/services/counter_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'features/splash/presentation/screens/splash_screen.dart';
 import 'features/home/presentation/screens/main_screen.dart';
@@ -21,14 +23,23 @@ void main() async {
     dotenv.env['SUPABASE_ANON_KEY'] = 'your-anon-key';
   }
   
-  // Initialize Supabase
+  // 🔄 서비스 초기화 순서 (기둥 → 가지)
+  print('🏗️ 1. Supabase 초기화 시작...');
   await SupabaseService.instance.initialize();
   
-  // Initialize Auth State Manager
+  print('🏗️ 2. ProfileImageManager 초기화 시작...');
+  await ProfileImageManager.instance.initialize();
+  
+  print('🏗️ 3. AuthStateManager 초기화 시작...');
   await AuthStateManager.instance.initializeAuthState();
   
-  // Initialize App State Manager
+  print('🏗️ 4. CounterService 초기화 시작...');
+  await CounterService.instance.initialize();
+  
+  print('🏗️ 5. AppStateManager 초기화 시작...');
   await AppStateManager.instance.initializeAppState();
+  
+  print('✅ 모든 서비스 초기화 완료');
   
   runApp(const JamJamApp());
 }
@@ -38,6 +49,7 @@ class JamJamApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    
     return MaterialApp(
       title: 'JamJam',
       debugShowCheckedModeBanner: false,

@@ -612,10 +612,10 @@ class _MyMusicScreenState extends State<MyMusicScreen> {
             Text('태그:', style: const TextStyle(color: AppTheme.white, fontWeight: FontWeight.bold)),
             Wrap(
               spacing: 8,
-              children: (music['tags'] as List<String>).map((tag) => Chip(
+              children: (music['tags'] as List?)?.cast<String>().map((tag) => Chip(
                 label: Text(tag, style: const TextStyle(color: AppTheme.white)),
                 backgroundColor: AppTheme.accentPink,
-              )).toList(),
+              )).toList() ?? [],
             ),
           ],
         ),

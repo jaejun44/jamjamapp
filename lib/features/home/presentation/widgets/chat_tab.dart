@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
 import 'package:jamjamapp/core/services/auth_state_manager.dart';
+import 'package:jamjamapp/core/services/profile_image_manager.dart';
 import '../../../chat/presentation/screens/chat_room_screen.dart';
 import 'user_profile_screen.dart';
 import 'dart:async';
@@ -210,11 +211,21 @@ class _ChatTabState extends State<ChatTab> {
             // 헤더
             Row(
               children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: AppTheme.accentPink,
-                  child: Text(chat['userAvatar'], style: const TextStyle(fontSize: 16)),
-                ),
+                // 채팅 상대방 프로필 이미지 (현재 사용자인지 확인)
+                chat['userName'] == AuthStateManager.instance.userName
+                    ? ProfileImageManager.instance.buildProfileImage(
+                        radius: 20,
+                        placeholder: CircleAvatar(
+                          radius: 20,
+                          backgroundColor: AppTheme.accentPink,
+                          child: const Icon(Icons.person, color: AppTheme.white, size: 20),
+                        ),
+                      )
+                    : CircleAvatar(
+                        radius: 20,
+                        backgroundColor: AppTheme.accentPink,
+                        child: Text(chat['userAvatar'], style: const TextStyle(fontSize: 16)),
+                      ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -468,14 +479,45 @@ class _ChatTabState extends State<ChatTab> {
 
   /// 채팅방 진입
   Widget _buildChatItem(Map<String, dynamic> chat) {
-    return ListTile(
-      leading: CircleAvatar(
+    // 현재 사용자인지 확인
+    final isCurrentUser = chat['userName'] == AuthStateManager.instance.userName;
+    
+    // 프로필 이미지 위젯 생성
+    Widget profileImage;
+    if (isCurrentUser) {
+      try {
+        profileImage = ProfileImageManager.instance.buildProfileImage(
+          radius: 20,
+          placeholder: CircleAvatar(
+            backgroundColor: AppTheme.accentPink,
+            child: const Text(
+              '나',
+              style: TextStyle(fontSize: 16, color: AppTheme.white),
+            ),
+          ),
+        );
+      } catch (e) {
+        print('❌ 채팅 탭 프로필 이미지 생성 실패: $e');
+        profileImage = CircleAvatar(
+          backgroundColor: AppTheme.accentPink,
+          child: const Text(
+            '나',
+            style: TextStyle(fontSize: 16, color: AppTheme.white),
+          ),
+        );
+      }
+    } else {
+      profileImage = CircleAvatar(
         backgroundColor: AppTheme.accentPink,
         child: Text(
           chat['userAvatar'],
           style: const TextStyle(fontSize: 16),
         ),
-      ),
+      );
+    }
+    
+    return ListTile(
+      leading: profileImage,
       title: Row(
         children: [
           Text(
