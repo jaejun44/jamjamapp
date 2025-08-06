@@ -642,6 +642,9 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
       print('✅ 새로운 참여자 수: ${participantsList.length}/${jamSession['maxParticipants']}');
     });
     _saveJamSessions();
+    
+    // 전체 잼 세션 목록 다시 로드하여 UI 즉시 업데이트
+    _loadJamSessionsFromAppState();
 
     _showSuccessDialog('잼 세션에 참여했습니다! 🎵');
   }
@@ -1665,21 +1668,15 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
                     _joinJamSession(jamSession);
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentPink),
-                  child: const Text('참여하기'),
+                  child: const Text('참여 신청'),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: OutlinedButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    _showJamChat(jamSession);
-                  },
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppTheme.accentPink,
-                    side: const BorderSide(color: AppTheme.accentPink),
-                  ),
-                  child: const Text('채팅'),
+                child: ElevatedButton(
+                  onPressed: () => _showJamDetails(jamSession),
+                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentPink),
+                  child: const Text('상세 보기'),
                 ),
               ),
             ],
@@ -2646,6 +2643,16 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
     });
     _saveJamSessions();
     
+    // 전체 잼 세션 목록 다시 로드하여 UI 즉시 업데이트
+    _loadJamSessionsFromAppState();
+    
+    // 모달이 열려있다면 모달 내부도 강제로 업데이트
+    if (Navigator.of(context).canPop()) {
+      // 현재 모달을 닫고 새로운 모달로 교체
+      Navigator.of(context).pop();
+      _showJamDetails(jamSession);
+    }
+    
     _showSuccessDialog('세션에서 나갔습니다.');
   }
 
@@ -2740,5 +2747,21 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
         ],
       ),
     );
+  }
+
+  /// AppStateManager에서 잼 세션 데이터 다시 로드
+  void _loadJamSessionsFromAppState() {
+    try {
+      final jamState = AppStateManager.instance.jamState;
+      final jamSessions = jamState['jamSessions'] as List<dynamic>? ?? [];
+      
+      setState(() {
+        _recentJamSessions = jamSessions.cast<Map<String, dynamic>>();
+      });
+      
+      print('🔄 잼 세션 데이터 다시 로드 완료: ${_recentJamSessions.length}개');
+    } catch (e) {
+      print('❌ 잼 세션 데이터 로드 실패: $e');
+    }
   }
 } 

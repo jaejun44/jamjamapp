@@ -54,24 +54,52 @@ class AuthStateManager {
     try {
       print('🔍 AuthStateManager 초기화 시작');
       
-      // 1. SharedPreferences에서 로그인 상태 확인
+      // 1. SharedPreferences에서 사용자 정보 확인
       final prefs = await SharedPreferences.getInstance();
       final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
+      final userEmail = prefs.getString('userEmail');
+      final userName = prefs.getString('userName');
+      
       print('🔍 SharedPreferences 로그인 상태: $isLoggedIn');
+      print('🔍 저장된 사용자 이메일: $userEmail');
+      print('🔍 저장된 사용자 이름: $userName');
       
       // 2. ProfileImageManager는 main.dart에서 이미 초기화됨
       print('🔄 ProfileImageManager 이미 초기화됨');
       
-      // 3. 로그인 상태에 따른 처리
-      if (isLoggedIn) {
+      // 3. testuser 자동 로그인 복원 로직
+      bool shouldRestoreLogin = false;
+      
+      // 3-1. 명시적으로 로그인 상태가 true인 경우
+      if (isLoggedIn && userEmail != null) {
+        shouldRestoreLogin = true;
+        print('✅ 명시적 로그인 상태 복원: $userEmail');
+      }
+      // 3-2. 로그인 상태가 false이지만 testuser 정보가 있는 경우 (자동 복원)
+      else if (userEmail == 'test@example.com' || userName != null) {
+        shouldRestoreLogin = true;
+        print('🔄 testuser 자동 로그인 복원 시작: ${userEmail ?? userName}');
+        
+        // testuser 로그인 상태 자동 복원
+        await prefs.setBool('isLoggedIn', true);
+        if (userEmail == null) {
+          await prefs.setString('userEmail', 'test@example.com');
+        }
+        if (prefs.getString('userId') == null) {
+          await prefs.setString('userId', 'testuser');
+        }
+      }
+      
+      // 4. 로그인 상태 처리
+      if (shouldRestoreLogin) {
         // 기존 프로필 데이터 로드 (덮어쓰지 않도록)
-        final userName = prefs.getString('userName') ?? 'JamMaster';
-        final userNickname = prefs.getString('userNickname') ?? '뮤직킹';
+        final restoredUserName = prefs.getString('userName') ?? 'testuser';
+        final userNickname = prefs.getString('userNickname') ?? 'testuser';
         final userBio = prefs.getString('userBio') ?? '음악을 사랑하는 testuser입니다 🎵';
         final userInstruments = prefs.getString('userInstruments') ?? '기타, 피아노';
         
         // 프로필 데이터 업데이트 (기존 데이터 보존)
-        _userName = userName;
+        _userName = restoredUserName;
         _userNickname = userNickname;
         _userBio = userBio;
         _userInstruments = userInstruments;
@@ -83,17 +111,17 @@ class AuthStateManager {
           _profileImageBytes = profileImageBytes;
           print('✅ AuthStateManager 프로필 이미지 동기화 완료: ${(profileImageBytes.length / 1024).toStringAsFixed(1)}KB');
         } else {
-          print('✅ AuthStateManager 프로필 이미지 동기화 완료: 이미지 없음');
+          print('❌ AuthStateManager에서 프로필 이미지 없음');
         }
         
-        print('✅ 로그인 상태 복원됨: $userName (이미지: ${_profileImageName ?? '없음'})');
+        print('✅ 로그인 상태 복원됨: $restoredUserName (이미지: ${_profileImageName ?? '없음'})');
       } else {
-        // 로그아웃 상태
+        // 완전히 새로운 사용자 - 로그아웃 상태
         _isLoggedIn = false;
-        print('❌ Supabase 사용자 없음, 로그아웃 상태로 변경');
+        print('❌ 새로운 사용자, 로그아웃 상태로 설정');
       }
       
-      // 4. 상태 변화 알림
+      // 5. 상태 변화 알림
       _notifyStateChange();
       
       print('✅ 인증 상태 초기화 완료 (프로필 데이터 보존)');

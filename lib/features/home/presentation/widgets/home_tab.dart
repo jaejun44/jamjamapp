@@ -143,121 +143,8 @@ class _HomeTabState extends State<HomeTab> {
     await _appStateManager.updateValue('home', 'isOfflineMode', value);
   }
 
-  // 실제 피드 데이터 (확장된 버전)
-  List<Map<String, dynamic>> _allFeedData = [
-    {
-      'id': 1,
-      'author': 'JamMaster1',
-      'authorAvatar': '🎸',
-      'title': '재즈 팝 퓨전 연주',
-      'content': '오늘 밤에 연주한 재즈 팝 퓨전 곡입니다! 🎵 #재즈 #팝 #퓨전',
-      'genre': '재즈',
-      'likes': 128,
-      'comments': 23,
-      'shares': 5,
-      'timestamp': '2시간 전',
-      'mediaType': 'video',
-      'tags': ['재즈', '팝', '퓨전', '기타'],
-    },
-    {
-      'id': 2,
-      'author': 'MusicLover2',
-      'authorAvatar': '🎹',
-      'title': '피아노 솔로 연주',
-      'content': '새로 작곡한 피아노 솔로 곡을 연주해봤어요 🎹 #피아노 #솔로 #작곡',
-      'genre': '클래식',
-      'likes': 95,
-      'comments': 15,
-      'shares': 3,
-      'timestamp': '4시간 전',
-      'mediaType': 'audio',
-      'tags': ['클래식', '피아노', '솔로', '작곡'],
-    },
-    {
-      'id': 3,
-      'author': 'GuitarHero3',
-      'authorAvatar': '🎸',
-      'title': '락 기타 리프',
-      'content': '오늘 연습한 락 기타 리프입니다! 🔥 #락 #기타 #리프',
-      'genre': '락',
-      'likes': 156,
-      'comments': 31,
-      'shares': 8,
-      'timestamp': '6시간 전',
-      'mediaType': 'video',
-      'tags': ['락', '기타', '리프', '연습'],
-    },
-    {
-      'id': 4,
-      'author': 'Pianist4',
-      'authorAvatar': '🎹',
-      'title': '클래식 연주회',
-      'content': '어제 연주회에서 연주한 모차르트 소나타입니다 🎼 #클래식 #모차르트',
-      'genre': '클래식',
-      'likes': 203,
-      'comments': 42,
-      'shares': 12,
-      'timestamp': '1일 전',
-      'mediaType': 'video',
-      'tags': ['클래식', '모차르트', '연주회', '피아노'],
-    },
-    {
-      'id': 5,
-      'author': 'Drummer5',
-      'authorAvatar': '🥁',
-      'title': '드럼 솔로',
-      'content': '새로 구입한 드럼으로 연주한 솔로입니다! 🥁 #드럼 #솔로',
-      'genre': '록',
-      'likes': 87,
-      'comments': 18,
-      'shares': 4,
-      'timestamp': '1일 전',
-      'mediaType': 'video',
-      'tags': ['록', '드럼', '솔로', '새드럼'],
-    },
-    {
-      'id': 6,
-      'author': 'Vocalist6',
-      'authorAvatar': '🎤',
-      'title': '보컬 커버',
-      'content': '좋아하는 곡을 커버해봤어요 🎤 #보컬 #커버 #팝',
-      'genre': '팝',
-      'likes': 134,
-      'comments': 27,
-      'shares': 6,
-      'timestamp': '2일 전',
-      'mediaType': 'audio',
-      'tags': ['팝', '보컬', '커버', '노래'],
-    },
-    {
-      'id': 7,
-      'author': 'Producer7',
-      'authorAvatar': '🎧',
-      'title': '일렉트로닉 비트',
-      'content': '새로 만든 일렉트로닉 비트입니다! 🎧 #일렉트로닉 #비트 #프로듀싱',
-      'genre': '일렉트로닉',
-      'likes': 178,
-      'comments': 35,
-      'shares': 9,
-      'timestamp': '3일 전',
-      'mediaType': 'audio',
-      'tags': ['일렉트로닉', '비트', '프로듀싱', 'EDM'],
-    },
-    {
-      'id': 8,
-      'author': 'Composer8',
-      'authorAvatar': '🎼',
-      'title': '오케스트라 작곡',
-      'content': '새로 작곡한 오케스트라 곡입니다 🎼 #작곡 #오케스트라 #클래식',
-      'genre': '클래식',
-      'likes': 245,
-      'comments': 48,
-      'shares': 15,
-      'timestamp': '4일 전',
-      'mediaType': 'audio',
-      'tags': ['클래식', '작곡', '오케스트라', '교향곡'],
-    },
-  ];
+  // 사용자가 생성한 실제 피드 데이터만 저장
+  List<Map<String, dynamic>> _allFeedData = [];
 
   // 현재 표시할 피드 데이터
   List<Map<String, dynamic>> _feedData = [];
@@ -586,27 +473,32 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  /// 실시간 업데이트 시작
+  /// 실시간 업데이트 시작 (더미 피드 생성 비활성화)
   void _startRealtimeUpdates() {
-    _realtimeUpdateTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
-      if (_isRealtimeUpdateEnabled && mounted) {
-        _checkForNewFeeds();
-      }
-    });
+    // 실제 백엔드 연동 시까지 비활성화
+    // _realtimeUpdateTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+    //   if (_isRealtimeUpdateEnabled && mounted) {
+    //     _checkForNewFeeds();
+    //   }
+    // });
+    print('🔄 실시간 업데이트: 더미 피드 생성 비활성화됨');
   }
 
-  /// 새 피드 확인
+  /// 새 피드 확인 (비활성화)
   void _checkForNewFeeds() {
-    // 시뮬레이션된 새 피드 생성
-    final now = DateTime.now();
-    if (now.difference(_lastUpdateTime).inMinutes >= 1) {
-      _addSimulatedNewFeed();
-      _lastUpdateTime = now;
-    }
+    // 더미 피드 생성 비활성화
+    // 실제 백엔드에서 새 피드를 가져오는 로직으로 대체 예정
+    print('🔄 새 피드 확인: 더미 피드 생성 비활성화됨');
   }
 
-  /// 시뮬레이션된 새 피드 추가
+  /// 시뮬레이션된 새 피드 추가 (비활성화)
   void _addSimulatedNewFeed() {
+    // 더미 피드 생성 완전 비활성화
+    print('🚫 더미 피드 생성 비활성화: 실제 사용자 피드만 표시');
+    return;
+
+    // 아래 코드는 실제 백엔드 연동 시 제거 예정
+    /*
     final newFeed = {
       'id': DateTime.now().millisecondsSinceEpoch,
       'author': 'NewArtist${DateTime.now().second}',
@@ -628,6 +520,7 @@ class _HomeTabState extends State<HomeTab> {
         _feedData.insert(0, newFeed);
       }
     });
+    */
 
     // 새 피드 알림
     if (mounted) {
@@ -1253,10 +1146,7 @@ class _HomeTabState extends State<HomeTab> {
                     child: feed['author'] == AuthStateManager.instance.userName && 
                            AuthStateManager.instance.profileImageBytes != null
                         ? null
-                        : Text(
-                            feed['authorAvatar'],
-                            style: const TextStyle(fontSize: 16),
-                          ),
+                        : _buildSafeAvatarText(feed['authorAvatar']),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -1676,5 +1566,21 @@ class _HomeTabState extends State<HomeTab> {
         builder: (context) => UserProfileScreen(username: username),
       ),
     );
+  }
+
+  /// 안전한 아바타 텍스트 빌드 (MemoryImage 타입 처리)
+  Widget _buildSafeAvatarText(dynamic avatar) {
+    if (avatar is String) {
+      return Text(
+        avatar,
+        style: const TextStyle(fontSize: 16),
+      );
+    } else {
+      // MemoryImage 등 복잡한 타입인 경우 기본 아이콘 표시
+      return const Text(
+        '👤',
+        style: TextStyle(fontSize: 16),
+      );
+    }
   }
 } 

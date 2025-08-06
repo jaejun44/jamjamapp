@@ -98,10 +98,7 @@ class _ShareModalState extends State<ShareModal> {
               CircleAvatar(
                 radius: 16,
                 backgroundColor: AppTheme.accentPink,
-                child: Text(
-                  widget.feed['authorAvatar'] ?? '👤',
-                  style: const TextStyle(fontSize: 12),
-                ),
+                child: _buildAvatarContent(),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -486,6 +483,25 @@ class _ShareModalState extends State<ShareModal> {
       );
     } else {
       throw Exception('$platformName을 열 수 없습니다.');
+    }
+  }
+
+  /// 아바타 콘텐츠 안전하게 빌드 (MemoryImage 타입 처리)
+  Widget _buildAvatarContent() {
+    final avatar = widget.feed['authorAvatar'];
+    
+    // MemoryImage나 다른 복잡한 타입인 경우 기본 아이콘 사용
+    if (avatar is String) {
+      return Text(
+        avatar,
+        style: const TextStyle(fontSize: 12),
+      );
+    } else {
+      // MemoryImage 등 복잡한 타입인 경우 기본 아이콘 표시
+      return const Text(
+        '👤',
+        style: TextStyle(fontSize: 12),
+      );
     }
   }
 } 

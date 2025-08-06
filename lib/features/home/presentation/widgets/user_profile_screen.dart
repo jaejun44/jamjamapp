@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
 import '../../../chat/presentation/screens/chat_room_screen.dart';
+import 'package:jamjamapp/core/services/auth_state_manager.dart';
 
 class UserProfileScreen extends StatefulWidget {
   final String username;
@@ -320,6 +321,18 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   }
 
   void _sendMessage() {
+    // 본인에게는 메시지를 보낼 수 없음
+    final currentUser = AuthStateManager.instance.userName;
+    if (widget.username == currentUser) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('본인에게는 메시지를 보낼 수 없습니다.'),
+          backgroundColor: AppTheme.grey,
+        ),
+      );
+      return;
+    }
+
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => ChatRoomScreen(

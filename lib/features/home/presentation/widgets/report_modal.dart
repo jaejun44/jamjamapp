@@ -131,10 +131,7 @@ class _ReportModalState extends State<ReportModal> {
               CircleAvatar(
                 radius: 16,
                 backgroundColor: AppTheme.accentPink,
-                child: Text(
-                  widget.feed['authorAvatar'] ?? '👤',
-                  style: const TextStyle(fontSize: 12),
-                ),
+                child: _buildSafeAvatarText(widget.feed['authorAvatar']),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -410,6 +407,22 @@ class _ReportModalState extends State<ReportModal> {
         return '기타 신고는 검토 후 적절한 조치를 취합니다.';
       default:
         return '신고 내용을 검토 후 조치하겠습니다.';
+    }
+  }
+
+  /// 안전하게 아바타 텍스트를 빌드합니다.
+  Widget _buildSafeAvatarText(dynamic avatar) {
+    if (avatar is String) {
+      return Text(
+        avatar,
+        style: const TextStyle(fontSize: 12),
+      );
+    } else {
+      // MemoryImage 등 복잡한 타입인 경우 기본 아이콘 표시
+      return const Text(
+        '👤',
+        style: TextStyle(fontSize: 12),
+      );
     }
   }
 } 

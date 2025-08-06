@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
+import 'package:jamjamapp/core/services/auth_state_manager.dart';
 
 class FeedEditModal extends StatefulWidget {
   final Map<String, dynamic> feed;
@@ -104,10 +105,7 @@ class _FeedEditModalState extends State<FeedEditModal> {
               CircleAvatar(
                 radius: 20,
                 backgroundColor: AppTheme.accentPink,
-                child: Text(
-                  widget.feed['authorAvatar'] ?? '👤',
-                  style: const TextStyle(fontSize: 16),
-                ),
+                child: _buildSafeAvatarText(widget.feed['authorAvatar']),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -178,7 +176,12 @@ class _FeedEditModalState extends State<FeedEditModal> {
 
   /// 옵션 버튼들
   Widget _buildOptions() {
-    final isAuthor = widget.feed['author'] == '나'; // 실제로는 현재 사용자와 비교
+    // 현재 로그인한 사용자와 피드 작성자 비교
+    final currentUser = AuthStateManager.instance.userName;
+    final feedAuthor = widget.feed['author']?.toString() ?? '';
+    final isAuthor = feedAuthor == currentUser;
+    
+    print('🔍 피드 작성자 확인: currentUser="$currentUser", feedAuthor="$feedAuthor", isAuthor=$isAuthor');
     
     return Column(
       children: [
@@ -484,5 +487,21 @@ class _FeedEditModalState extends State<FeedEditModal> {
         ],
       ),
     );
+  }
+
+  /// 안전하게 아바타 텍스트를 빌드합니다.
+  Widget _buildSafeAvatarText(dynamic avatar) {
+    if (avatar is String) {
+      return Text(
+        avatar,
+        style: const TextStyle(fontSize: 16),
+      );
+    } else {
+      // MemoryImage 등 복잡한 타입인 경우 기본 아이콘 표시
+      return const Text(
+        '👤',
+        style: TextStyle(fontSize: 16),
+      );
+    }
   }
 } 
