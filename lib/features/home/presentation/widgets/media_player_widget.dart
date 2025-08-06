@@ -5,6 +5,8 @@ import 'package:chewie/chewie.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
 import 'fullscreen_media_screen.dart';
 import 'dart:typed_data';
+import 'dart:html' as html;
+import 'dart:convert';
 
 class MediaPlayerWidget extends StatefulWidget {
   final String mediaType;
@@ -28,15 +30,18 @@ class _MediaPlayerWidgetState extends State<MediaPlayerWidget> {
   VideoPlayerController? _videoController;
   ChewieController? _chewieController;
   AudioPlayer? _audioPlayer;
-  bool _isPlaying = false;
   bool _isInitialized = false;
-  Duration _duration = Duration.zero;
-  Duration _position = Duration.zero;
+  bool _isLoading = true;
+  bool _isMuted = true; // ✅ 음향 제어: 기본적으로 음향 비활성화
+  bool _isPlaying = false; // ✅ 재생 상태 추가
+  Duration _duration = Duration.zero; // ✅ 재생 시간 추가
+  Duration _position = Duration.zero; // ✅ 현재 위치 추가
+  String? _blobUrl; // Blob URL 저장용 변수 추가
 
   @override
   void initState() {
     super.initState();
-    _initializePlayer();
+    _initializeMediaPlayer();
   }
 
   @override
@@ -44,53 +49,99 @@ class _MediaPlayerWidgetState extends State<MediaPlayerWidget> {
     _videoController?.dispose();
     _chewieController?.dispose();
     _audioPlayer?.dispose();
+    
+    // Blob URL 정리
+    if (_blobUrl != null) {
+      try {
+        html.Url.revokeObjectUrl(_blobUrl!);
+      } catch (e) {
+        print('❌ Blob URL 정리 실패: $e');
+      }
+    }
+    
     super.dispose();
   }
 
-  /// 플레이어 초기화
-  Future<void> _initializePlayer() async {
+  /// 미디어 데이터를 Blob URL로 변환
+  String? _createBlobUrl(Uint8List mediaData) {
     try {
-      if (widget.mediaType == 'video') {
-        await _initializeVideoPlayer();
-      } else if (widget.mediaType == 'audio') {
-        await _initializeAudioPlayer();
-      }
+      // Uint8List를 Blob으로 변환
+      final blob = html.Blob([mediaData]);
+      
+      // Blob URL 생성
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      
+      print('🎬 Blob URL 생성 완료: $url');
+      return url;
     } catch (e) {
-      print('미디어 플레이어 초기화 오류: $e');
+      print('❌ Blob URL 생성 실패: $e');
+      return null;
     }
   }
 
   /// 비디오 플레이어 초기화
   Future<void> _initializeVideoPlayer() async {
-    if (widget.mediaData != null) {
-      // 메모리에서 비디오 재생 (실제로는 임시 파일로 저장해야 함)
-      // 여기서는 시뮬레이션
-      await Future.delayed(const Duration(milliseconds: 500));
+    try {
+      if (widget.mediaData != null) {
+        print('🎬 비디오 데이터 감지: ${widget.mediaData!.length} bytes');
+        
+        // mediaData를 Blob URL로 변환
+        final blobUrl = _createBlobUrl(widget.mediaData!);
+        
+        if (blobUrl != null) {
+          _blobUrl = blobUrl; // Blob URL 저장
+          
+          // Blob URL을 사용하여 비디오 플레이어 초기화
+          _videoController = VideoPlayerController.network(blobUrl);
+          
+          await _videoController!.initialize();
+          
+          _chewieController = ChewieController(
+            videoPlayerController: _videoController!,
+            autoPlay: true, // ✅ 자동 재생 활성화
+            looping: false,
+            aspectRatio: _videoController!.value.aspectRatio,
+            allowFullScreen: true,
+            allowMuting: true,
+            showControls: true,
+            materialProgressColors: ChewieProgressColors(
+              playedColor: AppTheme.accentPink,
+              handleColor: AppTheme.accentPink,
+              backgroundColor: AppTheme.grey,
+              bufferedColor: AppTheme.lightGrey,
+            ),
+          );
+          
+          // ✅ 음향 제어: 기본적으로 음향 비활성화
+          _videoController!.setVolume(0.0);
+          
+          // ✅ 음향 제어: 터치 시 음향 활성화를 위한 리스너 추가
+          _videoController!.addListener(() {
+            if (_videoController!.value.isInitialized && !_isMuted) {
+              // 음향이 활성화된 상태에서만 볼륨 조절
+              _videoController!.setVolume(1.0);
+            }
+          });
+          
+          setState(() {
+            _isInitialized = true;
+            _isLoading = false;
+          });
+          
+          print('✅ 비디오 플레이어 초기화 완료');
+        } else {
+          throw Exception('Blob URL 생성 실패');
+        }
+      } else {
+        // 미디어 데이터가 없는 경우 플레이스홀더 표시
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('❌ 비디오 플레이어 초기화 실패: $e');
       setState(() {
-        _isInitialized = true;
-      });
-    } else if (widget.mediaUrl != null) {
-      _videoController = VideoPlayerController.networkUrl(Uri.parse(widget.mediaUrl!));
-      await _videoController!.initialize();
-      
-      _chewieController = ChewieController(
-        videoPlayerController: _videoController!,
-        autoPlay: false,
-        looping: false,
-        aspectRatio: _videoController!.value.aspectRatio,
-        allowFullScreen: true,
-        allowMuting: true,
-        showControls: true,
-        materialProgressColors: ChewieProgressColors(
-          playedColor: AppTheme.accentPink,
-          handleColor: AppTheme.accentPink,
-          backgroundColor: AppTheme.grey,
-          bufferedColor: AppTheme.grey.withValues(alpha: 0.5),
-        ),
-      );
-      
-      setState(() {
-        _isInitialized = true;
+        _isLoading = false;
       });
     }
   }
@@ -165,19 +216,97 @@ class _MediaPlayerWidgetState extends State<MediaPlayerWidget> {
     }
   }
 
+  /// 미디어 플레이어 초기화
+  Future<void> _initializeMediaPlayer() async {
+    try {
+      if (widget.mediaType == 'video') {
+        await _initializeVideoPlayer();
+      } else if (widget.mediaType == 'audio') {
+        await _initializeAudioPlayer();
+      }
+    } catch (e) {
+      print('❌ 미디어 플레이어 초기화 실패: $e');
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (!_isInitialized) {
-      return _buildLoadingState();
+    if (_isLoading) {
+      return Container(
+        height: 200,
+        decoration: BoxDecoration(
+          color: AppTheme.grey,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Center(
+          child: CircularProgressIndicator(
+            color: AppTheme.accentPink,
+          ),
+        ),
+      );
     }
 
-    if (widget.mediaType == 'video') {
-      return _buildVideoPlayer();
-    } else if (widget.mediaType == 'audio') {
-      return _buildAudioPlayer();
-    } else {
-      return _buildPlaceholder();
+    if (!_isInitialized || _chewieController == null) {
+      return Container(
+        height: 200,
+        decoration: BoxDecoration(
+          color: AppTheme.grey,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.video_library, color: AppTheme.white, size: 48),
+              SizedBox(height: 8),
+              Text(
+                '비디오를 불러올 수 없습니다',
+                style: TextStyle(color: AppTheme.white),
+              ),
+            ],
+          ),
+        ),
+      );
     }
+
+    return GestureDetector(
+      onTap: () {
+        // ✅ 터치 시 음향 활성화
+        if (_isMuted) {
+          setState(() {
+            _isMuted = false;
+          });
+          _videoController?.setVolume(1.0);
+          print('🔊 음향 활성화됨');
+        }
+      },
+      child: Stack(
+        children: [
+          Chewie(controller: _chewieController!),
+          // ✅ 음향 상태 표시 오버레이
+          if (_isMuted)
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.7),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Icon(
+                  Icons.volume_off,
+                  color: Colors.white,
+                  size: 16,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   /// 로딩 상태

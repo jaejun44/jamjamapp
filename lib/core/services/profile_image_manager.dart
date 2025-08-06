@@ -276,7 +276,6 @@ class ProfileImageManager {
       // 1. 캐시에서 확인
       final cachedImage = _imageCache['current_user'];
       if (cachedImage != null && cachedImage.isNotEmpty) {
-        print('✅ 캐시에서 프로필 이미지 반환: ${(cachedImage.length / 1024).toStringAsFixed(1)}KB');
         return cachedImage;
       }
       
@@ -285,11 +284,9 @@ class ProfileImageManager {
       if (authImage != null && authImage.isNotEmpty) {
         // 캐시에 저장
         _imageCache['current_user'] = authImage;
-        print('✅ AuthStateManager에서 프로필 이미지 반환: ${(authImage.length / 1024).toStringAsFixed(1)}KB');
         return authImage;
       }
       
-      print('❌ 프로필 이미지 없음');
       return null;
     } catch (e) {
       print('❌ 프로필 이미지 가져오기 실패: $e');
@@ -297,30 +294,22 @@ class ProfileImageManager {
     }
   }
 
-  /// 프로필 이미지 위젯 생성
+  /// 프로필 이미지 위젯 생성 (최적화된 버전)
   Widget buildProfileImage({
     double radius = 20,
     Color? backgroundColor,
     Widget? placeholder,
   }) {
-    // 1. 캐시에서 이미지 확인
-    Uint8List? imageBytes = getCurrentUserProfileImage();
+    // 1. 캐시에서 이미지 확인 (한 번만 호출)
+    Uint8List? imageBytes = _imageCache['current_user'];
     
-    // 2. 캐시에 없으면 AuthStateManager에서 확인
+    // 2. 캐시에 없으면 AuthStateManager에서 확인 (한 번만)
     if (imageBytes == null) {
       imageBytes = AuthStateManager.instance.profileImageBytes;
       if (imageBytes != null) {
         // 캐시에 저장
         _imageCache['current_user'] = imageBytes;
-        print('✅ AuthStateManager에서 프로필 이미지 복원됨');
       }
-    }
-    
-    // 3. 디버깅 로그
-    if (imageBytes != null) {
-      print('✅ 프로필 이미지 위젯 생성: ${(imageBytes.length / 1024).toStringAsFixed(1)}KB');
-    } else {
-      print('❌ 프로필 이미지 없음, 기본 아이콘 사용');
     }
     
     return CircleAvatar(
@@ -370,58 +359,37 @@ class ProfileImageManager {
   /// 초기화
   Future<void> initialize() async {
     try {
-      print('🔍 ProfileImageManager 초기화 시작');
-      
       // 1. SharedPreferences에서 이미지 로드
       final prefs = await SharedPreferences.getInstance();
       final imageData = prefs.getString('user_profile_image_data');
       
-      print('🔍 SharedPreferences에서 이미지 데이터 확인: ${imageData != null ? '있음 (${(imageData.length / 1024).toStringAsFixed(1)}KB)' : '없음'}');
-      
       if (imageData != null && imageData.isNotEmpty) {
         try {
-          print('🔍 Base64 디코딩 시작');
           // Base64 디코딩
           final imageBytes = base64Decode(imageData);
-          print('✅ Base64 디코딩 완료: ${(imageBytes.length / 1024).toStringAsFixed(1)}KB');
           
           // 이미지 유효성 검사
           if (isValidImage(imageBytes)) {
-            print('✅ 이미지 유효성 검사 통과');
             // 캐시에 저장
             _imageCache['current_user'] = imageBytes;
-            print('✅ 캐시에 이미지 저장 완료');
             
             // AuthStateManager 동기화
             AuthStateManager.instance.updateProfileImage(imageBytes, 'profile_image.jpg');
-            print('✅ AuthStateManager 동기화 완료');
-            
-            print('✅ ProfileImageManager 초기화 완료 - 이미지 로드됨: ${(imageBytes.length / 1024).toStringAsFixed(1)}KB');
           } else {
-            print('❌ ProfileImageManager 초기화 실패: 유효하지 않은 이미지');
             // 손상된 데이터 삭제
             await prefs.remove('user_profile_image_data');
-            print('✅ ProfileImageManager 초기화 완료 - 저장된 이미지 없음');
           }
         } catch (e) {
-          print('❌ ProfileImageManager 초기화 실패: 디코딩 오류 - $e');
           // 손상된 데이터 삭제
           await prefs.remove('user_profile_image_data');
-          print('✅ ProfileImageManager 초기화 완료 - 저장된 이미지 없음');
         }
-      } else {
-        print('✅ ProfileImageManager 초기화 완료 - 저장된 이미지 없음');
       }
       
       // 2. AuthStateManager에서 이미지 복원 시도
       final authImageBytes = AuthStateManager.instance.profileImageBytes;
       if (authImageBytes != null && authImageBytes.isNotEmpty) {
-        print('✅ AuthStateManager에서 프로필 이미지 발견: ${(authImageBytes.length / 1024).toStringAsFixed(1)}KB');
         // 캐시에 저장
         _imageCache['current_user'] = authImageBytes;
-        print('✅ AuthStateManager에서 프로필 이미지 복원됨: ${(authImageBytes.length / 1024).toStringAsFixed(1)}KB');
-      } else {
-        print('❌ AuthStateManager에서 프로필 이미지 없음');
       }
       
     } catch (e) {

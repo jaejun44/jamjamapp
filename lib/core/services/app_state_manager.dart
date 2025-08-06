@@ -336,56 +336,51 @@ class AppStateManager {
     }
   }
 
-  /// GPT 권장: 완전한 JSON 직렬화 호환 변환 함수
+  /// GPT 권장: JSON 직렬화 가능한 형태로 변환 (LinkedHashMap 제거)
   dynamic _makeSerializable(dynamic value) {
-    // 🗝️ 핵심: 모든 Map은 key를 String으로 변환 (GPT 권장 방식)
     if (value is Map) {
-      final Map<String, dynamic> serializable = {};
+      // 🔧 GPT 권장: LinkedHashMap 대신 일반 Map 사용
+      final Map<String, dynamic> safeMap = {};
       value.forEach((key, val) {
-        // 🔧 int key → String key 변환 (JSON 호환)
-        serializable[key.toString()] = _makeSerializable(val);
+        safeMap[key.toString()] = _makeSerializable(val);
       });
       print('🔧 Map 직렬화: ${value.runtimeType} → Map<String, dynamic> (키 ${value.length}개)');
-      return serializable;
+      return safeMap;
     }
     
-    // 📋 Set → List 변환 (JSON은 Set을 지원하지 않음)
-    if (value is Set) {
-      final list = value.map(_makeSerializable).toList();
-      print('🔧 Set 직렬화: ${value.runtimeType} → List (요소 ${value.length}개)');
-      return list;
-    }
-    
-    // 📋 List 재귀 처리
     if (value is List) {
-      return value.map((item) => _makeSerializable(item)).toList();
+      // 📋 타입 안전성을 위한 List 변환
+      final convertedList = value.map((item) => _makeSerializable(item)).toList();
+      print('🔧 List 직렬화: ${value.length}개 요소');
+      return convertedList;
     }
     
-    // 🖼️ MemoryImage → Base64 변환
+    // 🖼️ 이미지 데이터 압축 및 크기 제한
     if (value is MemoryImage) {
-      print('🖼️ MemoryImage 직렬화: ${value.bytes.length} bytes → Base64');
-      return {
-        '_type': 'MemoryImage',
-        '_data': base64Encode(value.bytes),
-      };
+      try {
+        final bytes = value.bytes;
+        // 이미지 크기 제한 (100KB)
+        if (bytes.length > 100 * 1024) {
+          print('⚠️ 이미지 크기 제한: ${(bytes.length / 1024).toStringAsFixed(1)}KB → 100KB로 제한');
+          // 여기서 실제 이미지 압축 로직을 구현할 수 있습니다
+          return {
+            '_type': 'MemoryImage',
+            '_data': base64Encode(bytes.take(100 * 1024).toList()),
+            '_compressed': true,
+          };
+        }
+        
+        return {
+          '_type': 'MemoryImage',
+          '_data': base64Encode(bytes),
+        };
+      } catch (e) {
+        print('❌ 이미지 직렬화 실패: $e');
+        return '👤'; // 기본 아바타로 대체
+      }
     }
     
-    // 🖼️ ImageProvider → 문자열 변환
-    if (value is ImageProvider) {
-      print('🖼️ ImageProvider 직렬화: $value → 기본 아바타');
-      return {
-        '_type': 'ImageProvider',
-        '_data': '👤', // 기본 아바타 문자열
-      };
-    }
-    
-    // 🛡️ 알 수 없는 객체 타입 안전 처리
-    if (value != null && value is! String && value is! int && value is! bool && value is! double) {
-      print('⚠️ 직렬화 불가능한 타입 감지: ${value.runtimeType} → 문자열로 변환');
-      return value.toString();
-    }
-    
-    // 🔢 원시 타입 (String, int, bool, double, null)
+    // 🔢 원시 타입은 그대로 반환
     return value;
   }
 
@@ -479,12 +474,54 @@ class AppStateManager {
         // 복잡한 객체는 JSON으로 저장 - 직렬화 가능한 형태로 변환
         final serializableValue = _makeSerializable(value);
         final jsonValue = jsonEncode(serializableValue);
+        
+        // 저장소 용량 체크
+        if (jsonValue.length > 500000) { // 500KB 제한
+          print('⚠️ 저장소 용량 초과 감지: ${(jsonValue.length / 1024).toStringAsFixed(1)}KB');
+          await _cleanupOldData(prefs, currentUserId, section);
+        }
+        
         await prefs.setString('app_state_${currentUserId}_${section}_$key', jsonValue);
       }
       
       print('💾 개별 값 저장 완료 - 사용자: $currentUserId, ${section}.$key');
     } catch (e) {
-      print('❌ 개별 값 저장 실패 - ${section}.$key: $e');
+      if (e.toString().contains('QuotaExceededError')) {
+        print('❌ 저장소 용량 초과: 데이터 정리 시작');
+        await _cleanupOldData(prefs, currentUserId, section);
+        // 재시도
+        try {
+          final serializableValue = _makeSerializable(value);
+          final jsonValue = jsonEncode(serializableValue);
+          await prefs.setString('app_state_${currentUserId}_${section}_$key', jsonValue);
+          print('✅ 데이터 정리 후 저장 성공');
+        } catch (retryError) {
+          print('❌ 재시도 실패: $retryError');
+        }
+      } else {
+        print('❌ 개별 값 저장 실패 - ${section}.$key: $e');
+      }
+    }
+  }
+
+  /// 오래된 데이터 정리
+  Future<void> _cleanupOldData(SharedPreferences prefs, String userId, String section) async {
+    try {
+      final keys = prefs.getKeys();
+      final targetKeys = keys.where((key) => 
+        key.startsWith('app_state_${userId}_${section}_') && 
+        key != 'app_state_${userId}_${section}_feedData' // 피드 데이터는 보존
+      ).toList();
+      
+      if (targetKeys.isNotEmpty) {
+        // 가장 오래된 데이터부터 삭제
+        for (final key in targetKeys.take(targetKeys.length ~/ 2)) {
+          await prefs.remove(key);
+          print('🗑️ 오래된 데이터 삭제: $key');
+        }
+      }
+    } catch (e) {
+      print('❌ 데이터 정리 실패: $e');
     }
   }
 

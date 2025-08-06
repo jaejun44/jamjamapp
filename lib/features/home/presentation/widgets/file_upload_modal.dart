@@ -64,6 +64,20 @@ class _FileUploadModalState extends State<FileUploadModal> {
       
       if (file != null && mounted) {
         final bytes = await file.readAsBytes();
+        
+        // 파일 크기 제한 (50MB)
+        if (bytes.length > 50 * 1024 * 1024) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('파일 크기가 너무 큽니다. 50MB 이하의 파일을 선택해주세요.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          return;
+        }
+        
         setState(() {
           _selectedFileName = file?.name ?? 'unknown_file';
           _fileSize = '${(bytes.length / (1024 * 1024)).toStringAsFixed(1)} MB';
@@ -144,8 +158,8 @@ class _FileUploadModalState extends State<FileUploadModal> {
     });
 
     // 업로드 진행률 시뮬레이션
-    for (int i = 0; i <= 100; i += 10) {
-      await Future.delayed(const Duration(milliseconds: 200));
+    for (int i = 0; i <= 100; i += 5) {
+      await Future.delayed(const Duration(milliseconds: 100));
       if (mounted) {
         setState(() {
           _uploadProgress = i / 100;
@@ -153,12 +167,8 @@ class _FileUploadModalState extends State<FileUploadModal> {
       }
     }
 
-    setState(() {
-      _isUploading = false;
-    });
-
     if (mounted) {
-      // 콜백 호출
+      // 콜백 호출 (상태 초기화 전에)
       if (widget.onUploadComplete != null) {
         widget.onUploadComplete!(
           _titleController.text,
@@ -166,6 +176,17 @@ class _FileUploadModalState extends State<FileUploadModal> {
           _selectedFileData,
         );
       }
+      
+      // 상태 초기화
+      setState(() {
+        _isUploading = false;
+        _uploadProgress = 0.0;
+        _selectedFileName = null;
+        _fileSize = null;
+        _selectedFileData = null;
+        _titleController.clear();
+        _descriptionController.clear();
+      });
       
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
