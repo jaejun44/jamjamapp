@@ -20,8 +20,8 @@ class AppStateManager {
   final Map<String, dynamic> _appState = {
     // 홈 탭 상태 - 수정: List는 .empty() 팩토리 사용
     'home': {
-      'likedFeeds': Map<int, bool>(), // 🔧 리터럴 대신 생성자 사용
-      'savedFeeds': Map<int, bool>(), // 🔧 리터럴 대신 생성자 사용
+      'likedFeeds': <int, bool>{}, // 🔧 리터럴 대신 생성자 사용
+      'savedFeeds': <int, bool>{}, // 🔧 리터럴 대신 생성자 사용
       'followedUsers': <String>[], // 🔧 List 리터럴은 안전함
       'isPersonalizedMode': true,
       'isOfflineMode': false,
@@ -34,19 +34,19 @@ class AppStateManager {
     
     // 댓글 시스템 상태 - ChatGPT-4o 권장: 명시적 생성자 사용
     'comments': {
-      'commentData': Map<String, List<Map<String, dynamic>>>(), // 🔧 리터럴 대신 생성자 사용
-      'replyData': Map<String, List<Map<String, dynamic>>>(), // 🔧 리터럴 대신 생성자 사용
-      'nestedReplyData': Map<String, List<Map<String, dynamic>>>(), // 🔧 리터럴 대신 생성자 사용
-      'commentCounts': Map<int, int>(), // 🔧 리터럴 대신 생성자 사용
-      'likeCounts': Map<int, int>(), // 🔧 리터럴 대신 생성자 사용
+      'commentData': <String, List<Map<String, dynamic>>>{}, // 🔧 리터럴 대신 생성자 사용
+      'replyData': <String, List<Map<String, dynamic>>>{}, // 🔧 리터럴 대신 생성자 사용
+      'nestedReplyData': <String, List<Map<String, dynamic>>>{}, // 🔧 리터럴 대신 생성자 사용
+      'commentCounts': <int, int>{}, // 🔧 리터럴 대신 생성자 사용
+      'likeCounts': <int, int>{}, // 🔧 리터럴 대신 생성자 사용
     },
     
     // 사용자 액션 상태 - 수정: List는 리터럴 사용
     'userActions': {
-      'likedPosts': Map<int, bool>(), // 🔧 리터럴 대신 생성자 사용
-      'savedPosts': Map<int, bool>(), // 🔧 리터럴 대신 생성자 사용
+      'likedPosts': <int, bool>{}, // 🔧 리터럴 대신 생성자 사용
+      'savedPosts': <int, bool>{}, // 🔧 리터럴 대신 생성자 사용
       'followedUsers': <String>[], // 🔧 List 리터럴은 안전함
-      'userProfileImage': Map<String, dynamic>(), // 🔧 리터럴 대신 생성자 사용
+      'userProfileImage': <String, dynamic>{}, // 🔧 리터럴 대신 생성자 사용
     },
     
     // 검색 탭 상태 - 수정: List는 리터럴 사용
@@ -78,7 +78,7 @@ class AppStateManager {
       'mutedChats': <int>[], // 🔧 List 리터럴은 안전함
       'pinnedChats': <int>[], // 🔧 List 리터럴은 안전함
       'isRealtimeUpdateEnabled': true,
-      'lastReadMessages': Map<int, String>(), // 🔧 리터럴 대신 생성자 사용
+      'lastReadMessages': <int, String>{}, // 🔧 리터럴 대신 생성자 사용
     },
     
     // 설정 상태
@@ -482,9 +482,9 @@ class AppStateManager {
         await prefs.setString('app_state_${currentUserId}_${section}_$key', jsonValue);
       }
       
-      print('💾 개별 값 저장 완료 - 사용자: $currentUserId, ${section}.$key');
+      print('💾 개별 값 저장 완료 - 사용자: $currentUserId, $section.$key');
     } catch (e) {
-      print('❌ 개별 값 저장 실패 - ${section}.$key: $e');
+      print('❌ 개별 값 저장 실패 - $section.$key: $e');
     }
   }
 

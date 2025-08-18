@@ -282,7 +282,7 @@ class _FullscreenMediaScreenState extends State<FullscreenMediaScreen> {
   /// 비디오 플레이어
   Widget _buildVideoPlayer() {
     if (_chewieController != null) {
-      return Container(
+      return SizedBox(
         width: double.infinity,
         child: Chewie(controller: _chewieController!),
       );
@@ -415,7 +415,7 @@ class _FullscreenMediaScreenState extends State<FullscreenMediaScreen> {
 
   /// 이미지 뷰어
   Widget _buildImageViewer() {
-    return Container(
+    return SizedBox(
       width: double.infinity,
       height: double.infinity,
       child: InteractiveViewer(

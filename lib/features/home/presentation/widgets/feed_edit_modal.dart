@@ -23,7 +23,7 @@ class _FeedEditModalState extends State<FeedEditModal> {
   late TextEditingController _contentController;
   late TextEditingController _genreController;
   bool _isEditing = false;
-  bool _isDeleting = false;
+  final bool _isDeleting = false;
 
   @override
   void initState() {

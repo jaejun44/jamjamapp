@@ -335,7 +335,7 @@ class _TrendingFeedsScreenState extends State<TrendingFeedsScreen> with TickerPr
                         ),
                       ),
                       Text(
-                        '${_selectedTimeFrame} 인기 급상승',
+                        '$_selectedTimeFrame 인기 급상승',
                         style: const TextStyle(
                           color: AppTheme.grey,
                           fontSize: 10,

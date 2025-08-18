@@ -11,8 +11,8 @@ class SearchService {
   SearchService._internal();
 
   // 캐시 관리
-  final Map<String, Map<String, dynamic>> _searchCache = LinkedHashMap<String, Map<String, dynamic>>();
-  final Map<String, DateTime> _cacheTimestamps = LinkedHashMap<String, DateTime>();
+  final Map<String, Map<String, dynamic>> _searchCache = <String, Map<String, dynamic>>{};
+  final Map<String, DateTime> _cacheTimestamps = <String, DateTime>{};
   static const Duration _cacheExpiration = Duration(minutes: 10);
 
   // 검색 히스토리 관리

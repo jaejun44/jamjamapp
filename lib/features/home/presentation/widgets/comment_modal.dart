@@ -9,10 +9,10 @@ class CommentModal extends StatefulWidget {
   final String feedTitle;
 
   const CommentModal({
-    Key? key,
+    super.key,
     required this.feedId,
     required this.feedTitle,
-  }) : super(key: key);
+  });
 
   @override
   State<CommentModal> createState() => _CommentModalState();

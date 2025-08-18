@@ -12,17 +12,17 @@ class CounterService {
 
   // 메모리 캐시 - ChatGPT-4o 권장: 명시적 생성자 사용
   Map<String, Map<int, int>> _counters = {
-    'likes': Map<int, int>(),      // 🔧 리터럴 대신 생성자 사용
-    'comments': Map<int, int>(),   // 🔧 리터럴 대신 생성자 사용
-    'shares': Map<int, int>(),     // 🔧 리터럴 대신 생성자 사용
-    'jamLikes': Map<int, int>(),   // 🔧 리터럴 대신 생성자 사용
+    'likes': <int, int>{},      // 🔧 리터럴 대신 생성자 사용
+    'comments': <int, int>{},   // 🔧 리터럴 대신 생성자 사용
+    'shares': <int, int>{},     // 🔧 리터럴 대신 생성자 사용
+    'jamLikes': <int, int>{},   // 🔧 리터럴 대신 생성자 사용
   };
   
   // 사용자별 좋아요 상태 (userId -> feedId -> bool) - ChatGPT-4o 권장
-  Map<String, Map<int, bool>> _userLikes = Map<String, Map<int, bool>>();
+  Map<String, Map<int, bool>> _userLikes = <String, Map<int, bool>>{};
   
   // 변화 알림 콜백
-  List<Function(String type, int id, int newCount)> _listeners = [];
+  final List<Function(String type, int id, int newCount)> _listeners = [];
 
   /// 서비스 초기화
   Future<void> initialize() async {
@@ -57,9 +57,9 @@ class CounterService {
     if (data != null) {
       final decoded = jsonDecode(data) as Map<String, dynamic>;
       // ChatGPT-4o 권장: 명시적 생성자 사용
-      _userLikes = Map<String, Map<int, bool>>(); // 🔧 리터럴 대신 생성자 사용
+      _userLikes = <String, Map<int, bool>>{}; // 🔧 리터럴 대신 생성자 사용
       for (final entry in decoded.entries) {
-        _userLikes[entry.key] = Map<int, bool>(); // 🔧 리터럴 대신 생성자 사용
+        _userLikes[entry.key] = <int, bool>{}; // 🔧 리터럴 대신 생성자 사용
         final userLikes = entry.value as Map<String, dynamic>;
         for (final e in userLikes.entries) {
           _userLikes[entry.key]![int.parse(e.key)] = e.value as bool;
@@ -107,7 +107,7 @@ class CounterService {
       final newUserLiked = !currentUserLiked;
       
       // 사용자 좋아요 상태 업데이트 - ChatGPT-4o 권장
-      _userLikes[userId] ??= Map<int, bool>(); // 🔧 리터럴 대신 생성자 사용
+      _userLikes[userId] ??= <int, bool>{}; // 🔧 리터럴 대신 생성자 사용
       _userLikes[userId]![feedId] = newUserLiked;
       
       // 전체 좋아요 카운트 업데이트
@@ -195,12 +195,12 @@ class CounterService {
     try {
       // ChatGPT-4o 권장: 명시적 생성자 사용
       _counters = {
-        'likes': Map<int, int>(), // 🔧 리터럴 대신 생성자 사용
-        'comments': Map<int, int>(), // 🔧 리터럴 대신 생성자 사용
-        'shares': Map<int, int>(), // 🔧 리터럴 대신 생성자 사용
-        'jamLikes': Map<int, int>(), // 🔧 리터럴 대신 생성자 사용
+        'likes': <int, int>{}, // 🔧 리터럴 대신 생성자 사용
+        'comments': <int, int>{}, // 🔧 리터럴 대신 생성자 사용
+        'shares': <int, int>{}, // 🔧 리터럴 대신 생성자 사용
+        'jamLikes': <int, int>{}, // 🔧 리터럴 대신 생성자 사용
       };
-      _userLikes = Map<String, Map<int, bool>>(); // 🔧 리터럴 대신 생성자 사용
+      _userLikes = <String, Map<int, bool>>{}; // 🔧 리터럴 대신 생성자 사용
       
       final prefs = await SharedPreferences.getInstance();
       for (final type in ['likes', 'comments', 'shares', 'jamLikes']) {

@@ -45,7 +45,7 @@ class _HomeTabState extends State<HomeTab> {
   
   // 실시간 업데이트 상태
   Timer? _realtimeUpdateTimer;
-  DateTime _lastUpdateTime = DateTime.now();
+  final DateTime _lastUpdateTime = DateTime.now();
   
   final RecommendationService _recommendationService = RecommendationService.instance;
   final OfflineService _offlineService = OfflineService();
@@ -55,8 +55,8 @@ class _HomeTabState extends State<HomeTab> {
   final List<String> _mediaTypes = ['전체', '비디오', '오디오', '이미지', '텍스트'];
 
   // 기본값 상수 정의 - 수정: Map은 생성자, List는 리터럴
-  static final Map<int, bool> _emptyLikedFeeds = Map<int, bool>(); // 🔧 리터럴 대신 생성자 사용
-  static final Map<int, bool> _emptySavedFeeds = Map<int, bool>(); // 🔧 리터럴 대신 생성자 사용
+  static final Map<int, bool> _emptyLikedFeeds = <int, bool>{}; // 🔧 리터럴 대신 생성자 사용
+  static final Map<int, bool> _emptySavedFeeds = <int, bool>{}; // 🔧 리터럴 대신 생성자 사용
   static final List<String> _emptyFollowedUsers = <String>[]; // 🔧 List 리터럴은 안전함
 
   // AppStateManager에서 상태를 가져오는 getter 메서드들 - ChatGPT-4o 권장
@@ -65,7 +65,7 @@ class _HomeTabState extends State<HomeTab> {
     if (rawData is Map) {
       try {
         // JSON에서 복원된 Map<String, dynamic>을 Map<int, bool>로 변환
-        final Map<int, bool> convertedMap = Map<int, bool>();
+        final Map<int, bool> convertedMap = <int, bool>{};
         rawData.forEach((key, value) {
           final intKey = key is String ? int.tryParse(key) ?? 0 : key as int;
           final boolValue = value is bool ? value : false;
@@ -85,7 +85,7 @@ class _HomeTabState extends State<HomeTab> {
     if (rawData is Map) {
       try {
         // JSON에서 복원된 Map<String, dynamic>을 Map<int, bool>로 변환
-        final Map<int, bool> convertedMap = Map<int, bool>();
+        final Map<int, bool> convertedMap = <int, bool>{};
         rawData.forEach((key, value) {
           final intKey = key is String ? int.tryParse(key) ?? 0 : key as int;
           final boolValue = value is bool ? value : false;
@@ -144,7 +144,7 @@ class _HomeTabState extends State<HomeTab> {
   }
 
   // 사용자가 생성한 실제 피드 데이터만 저장
-  List<Map<String, dynamic>> _allFeedData = [];
+  final List<Map<String, dynamic>> _allFeedData = [];
 
   // 현재 표시할 피드 데이터
   List<Map<String, dynamic>> _feedData = [];
@@ -238,7 +238,7 @@ class _HomeTabState extends State<HomeTab> {
   /// 사용자 좋아요 상태 복원 - ChatGPT-4o 권장
   void _syncUserLikeStates() {
     final userId = AuthStateManager.instance.userName;
-    final likedFeedsMap = Map<int, bool>(); // 🔧 리터럴 대신 생성자 사용
+    final likedFeedsMap = <int, bool>{}; // 🔧 리터럴 대신 생성자 사용
     
     for (int i = 0; i < _feedData.length; i++) {
       final feedId = _feedData[i]['id'] as int;

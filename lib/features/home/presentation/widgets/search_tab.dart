@@ -28,11 +28,11 @@ class _SearchTabState extends State<SearchTab> {
   Timer? _suggestionDebounceTimer;
   
   // 필터 상태 관리
-  Set<String> _selectedGenres = LinkedHashSet<String>();
-  Set<String> _selectedInstruments = LinkedHashSet<String>();
-  Set<String> _selectedLocations = LinkedHashSet<String>();
-  String _sortBy = 'relevance'; // 'relevance', 'name', 'followers', 'recent', 'posts'
-  String _sortOrder = 'desc'; // 'asc', 'desc'
+  final Set<String> _selectedGenres = LinkedHashSet<String>();
+  final Set<String> _selectedInstruments = LinkedHashSet<String>();
+  final Set<String> _selectedLocations = LinkedHashSet<String>();
+  final String _sortBy = 'relevance'; // 'relevance', 'name', 'followers', 'recent', 'posts'
+  final String _sortOrder = 'desc'; // 'asc', 'desc'
   
   // 고급 필터
   int? _minFollowers;
@@ -53,10 +53,10 @@ class _SearchTabState extends State<SearchTab> {
   // 검색 결과
   List<Map<String, dynamic>> _allMusicians = [];
   List<Map<String, dynamic>> _filteredMusicians = [];
-  List<Map<String, dynamic>> _displayedMusicians = [];
+  final List<Map<String, dynamic>> _displayedMusicians = [];
   
   // 검색 통계
-  Map<String, dynamic> _searchStats = LinkedHashMap<String, dynamic>();
+  Map<String, dynamic> _searchStats = <String, dynamic>{};
   
   // 에러 상태
   String? _errorMessage;

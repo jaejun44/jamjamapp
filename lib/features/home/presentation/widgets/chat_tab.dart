@@ -20,7 +20,7 @@ class _ChatTabState extends State<ChatTab> {
   
   // 실시간 업데이트 상태
   Timer? _realtimeUpdateTimer;
-  bool _isRealtimeUpdateEnabled = true;
+  final bool _isRealtimeUpdateEnabled = true;
   
   // 필터 상태
   String _selectedFilter = '전체';

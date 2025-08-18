@@ -318,13 +318,13 @@ class _ShareModalState extends State<ShareModal> {
     
     switch (shareType) {
       case 'link':
-        shareMessage = 'JamJam에서 ${feedAuthor}의 "${feedTitle}" 피드를 확인해보세요! 🎵';
+        shareMessage = 'JamJam에서 $feedAuthor의 "$feedTitle" 피드를 확인해보세요! 🎵';
         break;
       case 'screenshot':
-        shareMessage = '${feedAuthor}의 "${feedTitle}" 피드 스크린샷을 공유합니다! 📸';
+        shareMessage = '$feedAuthor의 "$feedTitle" 피드 스크린샷을 공유합니다! 📸';
         break;
       case 'embed':
-        shareMessage = '${feedAuthor}의 "${feedTitle}" 피드 임베드 코드를 공유합니다! 🔗';
+        shareMessage = '$feedAuthor의 "$feedTitle" 피드 임베드 코드를 공유합니다! 🔗';
         break;
     }
 

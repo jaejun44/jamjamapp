@@ -29,11 +29,11 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
   bool _isUploading = false;
   
   // 참여인원 수 설정
-  int _maxParticipants = 5;
+  final int _maxParticipants = 5;
   
   // 실시간 업데이트 상태
   Timer? _realtimeUpdateTimer;
-  bool _isRealtimeUpdateEnabled = true;
+  final bool _isRealtimeUpdateEnabled = true;
   
   // 검색 및 필터 상태
   String _searchQuery = '';
@@ -41,7 +41,7 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
   final List<String> _filterOptions = ['전체', '모집 중', '진행 중', '완료'];
   
   // 업로드된 파일들
-  List<Map<String, dynamic>> _uploadedFiles = [];
+  final List<Map<String, dynamic>> _uploadedFiles = [];
   Uint8List? _uploadedMediaData;
   String? _uploadedMediaType;
 
@@ -1728,7 +1728,7 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
       margin: const EdgeInsets.only(bottom: 8),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
-        onLongPress: canKick ? () => _kickParticipant(jamSession!, participant) : null,
+        onLongPress: canKick ? () => _kickParticipant(jamSession, participant) : null,
         child: ListTile(
           leading: Stack(
           children: [

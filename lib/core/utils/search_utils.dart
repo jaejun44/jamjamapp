@@ -62,7 +62,9 @@ class SearchUtils {
     int k = 0;
     for (int i = 0; i < s1.length; i++) {
       if (!s1Matches[i]) continue;
-      while (!s2Matches[k]) k++;
+      while (!s2Matches[k]) {
+        k++;
+      }
       if (s1[i] != s2[k]) transpositions++;
       k++;
     }
@@ -309,15 +311,15 @@ class SearchUtils {
         'total': 0,
         'online': 0,
         'verified': 0,
-        'genres': LinkedHashMap<String, int>(),
-        'instruments': LinkedHashMap<String, int>(),
-        'locations': LinkedHashMap<String, int>(),
+        'genres': <String, int>{},
+        'instruments': <String, int>{},
+        'locations': <String, int>{},
       };
     }
     
-    Map<String, int> genres = LinkedHashMap<String, int>();
-    Map<String, int> instruments = LinkedHashMap<String, int>();
-    Map<String, int> locations = LinkedHashMap<String, int>();
+    Map<String, int> genres = <String, int>{};
+    Map<String, int> instruments = <String, int>{};
+    Map<String, int> locations = <String, int>{};
     int online = 0;
     int verified = 0;
     

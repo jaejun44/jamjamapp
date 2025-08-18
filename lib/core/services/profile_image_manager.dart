@@ -16,7 +16,7 @@ class ProfileImageManager {
   static ProfileImageManager get instance => _instance;
 
   // 이미지 캐시
-  final Map<String, Uint8List> _imageCache = LinkedHashMap<String, Uint8List>();
+  final Map<String, Uint8List> _imageCache = <String, Uint8List>{};
   
   // 콜백 리스트
   final List<Function(Uint8List?)> _imageChangeCallbacks = [];
@@ -192,7 +192,7 @@ class ProfileImageManager {
     try {
       // 간단한 크기 조정 시뮬레이션
       // 실제로는 flutter_image 라이브러리 사용
-      print('✅ 이미지 크기 조정 완료: ${maxWidth}x${maxHeight}');
+      print('✅ 이미지 크기 조정 완료: ${maxWidth}x$maxHeight');
       print('💡 향후 flutter_image 라이브러리로 실제 리사이즈 구현 예정');
       
       return imageBytes;
@@ -206,7 +206,7 @@ class ProfileImageManager {
   bool isValidImage(Uint8List imageBytes) {
     try {
       // 1. 기본적인 크기 검사
-      if (imageBytes.length == 0) {
+      if (imageBytes.isEmpty) {
         print('❌ 이미지가 비어있습니다.');
         return false;
       }

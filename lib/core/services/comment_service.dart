@@ -26,7 +26,7 @@ class CommentService {
 
     // AppStateManager에 댓글 추가
     final commentData = LinkedHashMap<String, List<Map<String, dynamic>>>.from(
-      AppStateManager.instance.getState('comments')['commentData'] ?? LinkedHashMap<String, List<Map<String, dynamic>>>()
+      AppStateManager.instance.getState('comments')['commentData'] ?? <String, List<Map<String, dynamic>>>{}
     );
     
     print('🔍 현재 저장된 댓글 데이터 키들: ${commentData.keys.toList()}');

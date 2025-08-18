@@ -1,5 +1,3 @@
-import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:math';
 
 class RecommendationService {
   static RecommendationService? _instance;

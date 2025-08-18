@@ -15,13 +15,13 @@ class LiveStreamingScreen extends StatefulWidget {
 }
 
 class _LiveStreamingScreenState extends State<LiveStreamingScreen> {
-  bool _isLive = true;
+  final bool _isLive = true;
   bool _isFollowing = false;
   bool _isLiked = false;
   int _viewerCount = 0;
   int _likeCount = 0;
   List<Map<String, dynamic>> _comments = [];
-  TextEditingController _commentController = TextEditingController();
+  final TextEditingController _commentController = TextEditingController();
   Timer? _viewerTimer;
   Timer? _likeTimer;
 
