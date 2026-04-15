@@ -3,7 +3,7 @@ import 'package:video_player/video_player.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:chewie/chewie.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
-import 'fullscreen_media_screen.dart';
+import '../screens/fullscreen_media_screen.dart';
 import 'dart:typed_data';
 
 class MediaPlayerWidget extends StatefulWidget {
@@ -55,8 +55,7 @@ class _MediaPlayerWidgetState extends State<MediaPlayerWidget> {
       } else if (widget.mediaType == 'audio') {
         await _initializeAudioPlayer();
       }
-    } catch (e) {
-      print('미디어 플레이어 초기화 오류: $e');
+    } catch (e) { // ignore: empty_catches
     }
   }
 

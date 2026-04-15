@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
 import 'user_profile_screen.dart';
-import '../../../chat/presentation/screens/chat_room_screen.dart';
+import '../../../../chat/presentation/screens/chat_room_screen.dart';
 
 class BookmarksScreen extends StatefulWidget {
   const BookmarksScreen({super.key});

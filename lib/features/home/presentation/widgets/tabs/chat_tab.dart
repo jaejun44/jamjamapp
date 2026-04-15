@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
 import 'package:jamjamapp/core/services/auth_state_manager.dart';
+import 'package:jamjamapp/core/services/chat_service.dart';
 import 'package:jamjamapp/core/services/profile_image_manager.dart';
-import '../../../chat/presentation/screens/chat_room_screen.dart';
-import 'user_profile_screen.dart';
+import '../../../../chat/presentation/screens/chat_room_screen.dart';
+import '../screens/user_profile_screen.dart';
 import 'dart:async';
 
 class ChatTab extends StatefulWidget {
@@ -26,8 +27,8 @@ class _ChatTabState extends State<ChatTab> {
   String _selectedFilter = '전체';
   final List<String> _filterOptions = ['전체', '온라인', '미읽음', '미디어'];
 
-  // 실시간 채팅 데이터 (확장된 버전)
-  final List<Map<String, dynamic>> _chatList = [
+  // 실시간 채팅 데이터 (Supabase 로드 성공 시 교체됨)
+  List<Map<String, dynamic>> _chatList = [
     {
       'id': 1,
       'userName': 'JamMaster1',
@@ -105,6 +106,16 @@ class _ChatTabState extends State<ChatTab> {
     super.initState();
     _filteredChatList = _chatList;
     _startRealtimeUpdates();
+    _loadConversationsFromSupabase();
+  }
+
+  Future<void> _loadConversationsFromSupabase() async {
+    final conversations = await ChatService.instance.getConversations();
+    if (!mounted || conversations.isEmpty) return;
+    setState(() {
+      _chatList = conversations;
+      _filteredChatList = _chatList;
+    });
   }
 
   @override
@@ -497,7 +508,6 @@ class _ChatTabState extends State<ChatTab> {
           ),
         );
       } catch (e) {
-        print('❌ 채팅 탭 프로필 이미지 생성 실패: $e');
         profileImage = CircleAvatar(
           backgroundColor: AppTheme.accentPink,
           child: const Text(
@@ -588,6 +598,7 @@ class _ChatTabState extends State<ChatTab> {
             builder: (context) => ChatRoomScreen(
               userName: chat['userName'],
               userAvatar: chat['userAvatar'],
+              otherUserId: chat['otherUserId'] as String?,
             ),
           ),
         );

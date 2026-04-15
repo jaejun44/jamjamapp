@@ -25,7 +25,6 @@ class OfflineService {
   /// 네트워크 상태 토글 (테스트용)
   void toggleNetworkStatus() {
     _isOnline = !_isOnline;
-    print('네트워크 상태: ${_isOnline ? "온라인" : "오프라인"}');
   }
 
   /// 피드 데이터 캐시
@@ -66,7 +65,6 @@ class OfflineService {
       
       return feeds.cast<Map<String, dynamic>>();
     } catch (e) {
-      print('캐시된 피드 로드 오류: $e');
       return [];
     }
   }
@@ -87,7 +85,6 @@ class OfflineService {
     try {
       return jsonDecode(cachedData) as Map<String, dynamic>;
     } catch (e) {
-      print('캐시된 사용자 데이터 로드 오류: $e');
       return null;
     }
   }
@@ -177,11 +174,9 @@ class OfflineService {
     final pendingActions = await loadPendingActions();
     if (pendingActions.isEmpty) return;
     
-    print('대기 중인 액션 처리 중: ${pendingActions.length}개');
     
     // 실제로는 서버에 동기화하는 로직
-    for (final action in pendingActions) {
-      print('처리 중: ${action['action']}');
+    for (final _ in pendingActions) {
       await Future.delayed(const Duration(milliseconds: 100)); // 시뮬레이션
     }
     
@@ -207,7 +202,6 @@ class OfflineService {
   /// 액션 처리 (온라인)
   Future<void> _processAction(String action, Map<String, dynamic> data) async {
     // 실제로는 서버 API 호출
-    print('온라인 액션 처리: $action');
     await Future.delayed(const Duration(milliseconds: 200)); // 시뮬레이션
   }
 
@@ -258,7 +252,6 @@ class OfflineService {
   /// 오프라인 모드 활성화/비활성화
   void setOfflineMode(bool enabled) {
     _isOnline = !enabled;
-    print('오프라인 모드: ${enabled ? "활성화" : "비활성화"}');
   }
 
   /// 네트워크 연결 상태 모니터링 (시뮬레이션)
@@ -281,11 +274,9 @@ class OfflineService {
   /// 강제 동기화
   Future<void> forceSync() async {
     if (!_isOnline) {
-      print('오프라인 상태에서는 동기화할 수 없습니다.');
       return;
     }
     
-    print('강제 동기화 시작...');
     
     // 대기 중인 액션 처리
     await processPendingActions();
@@ -293,6 +284,5 @@ class OfflineService {
     // 캐시 업데이트
     await _updateLastSyncTime();
     
-    print('동기화 완료');
   }
 } 

@@ -15,7 +15,6 @@ class ReportModal extends StatefulWidget {
 
 class _ReportModalState extends State<ReportModal> {
   String _selectedReason = '';
-  String _additionalDetails = '';
   bool _isSubmitting = false;
 
   final List<Map<String, dynamic>> _reportReasons = [
@@ -280,11 +279,7 @@ class _ReportModalState extends State<ReportModal> {
         ),
         const SizedBox(height: 12),
         TextField(
-          onChanged: (value) {
-            setState(() {
-              _additionalDetails = value;
-            });
-          },
+          onChanged: (_) {},
           style: const TextStyle(color: AppTheme.white),
           maxLines: 4,
           decoration: InputDecoration(
@@ -358,59 +353,27 @@ class _ReportModalState extends State<ReportModal> {
     // 시뮬레이션된 신고 처리 시간
     await Future.delayed(const Duration(seconds: 2));
 
-    // 신고 데이터 구성
-    final reportData = {
-      'feedId': widget.feed['id'],
-      'feedAuthor': widget.feed['author'],
-      'reason': _selectedReason,
-      'reasonTitle': _reportReasons.firstWhere((r) => r['id'] == _selectedReason)['title'],
-      'additionalDetails': _additionalDetails,
-      'timestamp': DateTime.now().toIso8601String(),
-      'reporterId': 'current_user', // 실제로는 현재 사용자 ID
-    };
-
     // 신고 처리 (실제로는 서버에 전송)
-    print('신고 제출: $reportData');
 
     setState(() {
       _isSubmitting = false;
     });
 
+    if (!mounted) return;
+
     // 성공 메시지 표시
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('신고가 성공적으로 접수되었습니다. 검토 후 조치하겠습니다.'),
-          backgroundColor: AppTheme.accentPink,
-          duration: Duration(seconds: 3),
-        ),
-      );
-    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('신고가 성공적으로 접수되었습니다. 검토 후 조치하겠습니다.'),
+        backgroundColor: AppTheme.accentPink,
+        duration: Duration(seconds: 3),
+      ),
+    );
 
     Navigator.of(context).pop();
   }
 
-  /// 신고 사유별 처리 방법 안내
-  String _getReasonDescription(String reasonId) {
-    switch (reasonId) {
-      case 'spam':
-        return '스팸 콘텐츠는 24시간 내에 검토하여 삭제됩니다.';
-      case 'inappropriate':
-        return '부적절한 콘텐츠는 즉시 검토하여 조치합니다.';
-      case 'copyright':
-        return '저작권 침해 신고는 법적 검토 후 처리됩니다.';
-      case 'harassment':
-        return '괴롭힘 신고는 즉시 검토하여 계정 제재를 고려합니다.';
-      case 'fake':
-        return '허위 정보는 팩트체크 후 처리됩니다.';
-      case 'other':
-        return '기타 신고는 검토 후 적절한 조치를 취합니다.';
-      default:
-        return '신고 내용을 검토 후 조치하겠습니다.';
-    }
-  }
-
-  /// 안전하게 아바타 텍스트를 빌드합니다.
+/// 안전하게 아바타 텍스트를 빌드합니다.
   Widget _buildSafeAvatarText(dynamic avatar) {
     if (avatar is String) {
       return Text(

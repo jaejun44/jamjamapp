@@ -23,7 +23,6 @@ class _FeedEditModalState extends State<FeedEditModal> {
   late TextEditingController _contentController;
   late TextEditingController _genreController;
   bool _isEditing = false;
-  final bool _isDeleting = false;
 
   @override
   void initState() {
@@ -181,7 +180,6 @@ class _FeedEditModalState extends State<FeedEditModal> {
     final feedAuthor = widget.feed['author']?.toString() ?? '';
     final isAuthor = feedAuthor == currentUser;
     
-    print('🔍 피드 작성자 확인: currentUser="$currentUser", feedAuthor="$feedAuthor", isAuthor=$isAuthor');
     
     return Column(
       children: [

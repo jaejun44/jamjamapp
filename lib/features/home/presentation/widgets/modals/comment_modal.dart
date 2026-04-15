@@ -7,11 +7,13 @@ import 'package:jamjamapp/core/theme/app_theme.dart';
 class CommentModal extends StatefulWidget {
   final int feedId;
   final String feedTitle;
+  final String? supabaseFeedId;
 
   const CommentModal({
     super.key,
     required this.feedId,
     required this.feedTitle,
+    this.supabaseFeedId,
   });
 
   @override
@@ -28,10 +30,22 @@ class _CommentModalState extends State<CommentModal> {
   int? _replyingToReplyId;
   int? _editingCommentId;
   bool _isSubmitting = false;
+  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
+    _initComments();
+  }
+
+  Future<void> _initComments() async {
+    final supabaseFeedId = widget.supabaseFeedId;
+    if (supabaseFeedId != null) {
+      setState(() => _isLoading = true);
+      await CommentService.instance.loadFromSupabase(supabaseFeedId, widget.feedId);
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+    }
     _loadComments();
   }
 
@@ -82,7 +96,8 @@ class _CommentModalState extends State<CommentModal> {
       _editCommentController.clear();
       _editingCommentId = null;
       _loadComments();
-      
+
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('댓글이 수정되었습니다!'),
@@ -91,6 +106,7 @@ class _CommentModalState extends State<CommentModal> {
         ),
       );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('댓글 수정 중 오류가 발생했습니다: $e'),
@@ -135,7 +151,8 @@ class _CommentModalState extends State<CommentModal> {
       await CommentService.instance.addComment(widget.feedId, _commentController.text.trim());
       _commentController.clear();
       _loadComments();
-      
+
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('댓글이 추가되었습니다!'),
@@ -144,6 +161,7 @@ class _CommentModalState extends State<CommentModal> {
         ),
       );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('댓글 추가 중 오류가 발생했습니다: $e'),
@@ -163,6 +181,7 @@ class _CommentModalState extends State<CommentModal> {
       await CommentService.instance.toggleCommentLike(commentId);
       _loadComments();
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('좋아요 처리 중 오류가 발생했습니다: $e'),
@@ -210,7 +229,8 @@ class _CommentModalState extends State<CommentModal> {
       _replyController.clear();
       _replyingToCommentId = null;
       _loadComments();
-      
+
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('답글이 추가되었습니다!'),
@@ -219,6 +239,7 @@ class _CommentModalState extends State<CommentModal> {
         ),
       );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('답글 추가 중 오류가 발생했습니다: $e'),
@@ -270,7 +291,8 @@ class _CommentModalState extends State<CommentModal> {
       _nestedReplyController.clear();
       _replyingToReplyId = null;
       _loadComments();
-      
+
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('답글이 추가되었습니다!'),
@@ -279,6 +301,7 @@ class _CommentModalState extends State<CommentModal> {
         ),
       );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('답글 추가 중 오류가 발생했습니다: $e'),
@@ -298,6 +321,7 @@ class _CommentModalState extends State<CommentModal> {
       await CommentService.instance.toggleReplyLike(replyId);
       _loadComments();
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('좋아요 처리 중 오류가 발생했습니다: $e'),
@@ -313,6 +337,7 @@ class _CommentModalState extends State<CommentModal> {
       await CommentService.instance.toggleNestedReplyLike(nestedReplyId);
       _loadComments();
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('좋아요 처리 중 오류가 발생했습니다: $e'),
@@ -348,10 +373,11 @@ class _CommentModalState extends State<CommentModal> {
             TextButton(
               onPressed: () async {
                 Navigator.of(context).pop(); // 다이얼로그 닫기
+                final messenger = ScaffoldMessenger.of(context);
                 try {
                   await CommentService.instance.deleteComment(commentId);
                   _loadComments();
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  messenger.showSnackBar(
                     const SnackBar(
                       content: Text('댓글이 삭제되었습니다!'),
                       backgroundColor: AppTheme.accentPink,
@@ -359,7 +385,7 @@ class _CommentModalState extends State<CommentModal> {
                     ),
                   );
                 } catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  messenger.showSnackBar(
                     SnackBar(
                       content: Text('댓글 삭제 중 오류가 발생했습니다: $e'),
                       backgroundColor: Colors.red,
@@ -512,7 +538,9 @@ class _CommentModalState extends State<CommentModal> {
               
               // 댓글 목록
               Expanded(
-                child: _comments.isEmpty
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _comments.isEmpty
                     ? const Center(
                         child: Text(
                           '아직 댓글이 없습니다.\n첫 번째 댓글을 남겨보세요!',

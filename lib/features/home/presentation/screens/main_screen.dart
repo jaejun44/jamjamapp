@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
-import '../widgets/home_tab.dart';
-import '../widgets/search_tab.dart';
-import '../widgets/jam_creation_tab.dart';
-import '../widgets/chat_tab.dart';
-import '../widgets/profile_tab.dart';
+import '../widgets/tabs/home_tab.dart';
+import '../widgets/tabs/search_tab.dart';
+import '../widgets/tabs/jam_creation_tab.dart';
+import '../widgets/tabs/chat_tab.dart';
+import '../widgets/tabs/profile_tab.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});

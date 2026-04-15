@@ -1,10 +1,8 @@
-import 'dart:collection';
 import 'package:flutter/material.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
 import 'package:jamjamapp/core/services/search_service.dart';
 import 'package:jamjamapp/core/services/auth_state_manager.dart';
-import 'package:jamjamapp/core/services/profile_image_manager.dart';
-import 'user_profile_screen.dart';
+import '../screens/user_profile_screen.dart';
 import 'dart:async';
 
 class SearchTab extends StatefulWidget {
@@ -23,14 +21,13 @@ class _SearchTabState extends State<SearchTab> {
   String _searchQuery = '';
   bool _isSearching = false;
   bool _isLoadingMore = false;
-  bool _isLoadingSuggestions = false;
   Timer? _searchDebounceTimer;
   Timer? _suggestionDebounceTimer;
   
   // 필터 상태 관리
-  final Set<String> _selectedGenres = LinkedHashSet<String>();
-  final Set<String> _selectedInstruments = LinkedHashSet<String>();
-  final Set<String> _selectedLocations = LinkedHashSet<String>();
+  final Set<String> _selectedGenres = <String>{};
+  final Set<String> _selectedInstruments = <String>{};
+  final Set<String> _selectedLocations = <String>{};
   final String _sortBy = 'relevance'; // 'relevance', 'name', 'followers', 'recent', 'posts'
   final String _sortOrder = 'desc'; // 'asc', 'desc'
   
@@ -40,9 +37,7 @@ class _SearchTabState extends State<SearchTab> {
   bool? _isOnline;
   bool? _isVerified;
   
-  // 검색 히스토리
-  List<String> _searchHistory = [];
-  Set<String> _favoriteSearches = LinkedHashSet<String>();
+  // 검색 제안
   List<String> _searchSuggestions = [];
   
   // 페이지네이션
@@ -85,9 +80,6 @@ class _SearchTabState extends State<SearchTab> {
       
       // 검색 서비스 사전 로드
       await _searchService.preloadSearchData(_allMusicians);
-      
-      // 검색 히스토리 로드
-      await _loadSearchHistory();
       
       // 초기 검색 실행
       _filteredMusicians = _allMusicians;
@@ -267,16 +259,6 @@ class _SearchTabState extends State<SearchTab> {
     ];
   }
 
-  /// 검색 히스토리 로드
-  Future<void> _loadSearchHistory() async {
-    try {
-      _searchHistory = await _searchService.getSearchHistory();
-      _favoriteSearches = await _searchService.getFavoriteSearches();
-    } catch (e) {
-      _setError('검색 히스토리 로드 중 오류가 발생했습니다: $e');
-    }
-  }
-
   /// 실시간 검색 (디바운싱 적용)
   void _performSearch(String query) {
     _searchDebounceTimer?.cancel();
@@ -337,10 +319,6 @@ class _SearchTabState extends State<SearchTab> {
     _suggestionDebounceTimer = Timer(const Duration(milliseconds: 200), () async {
       if (!mounted) return;
 
-      setState(() {
-        _isLoadingSuggestions = true;
-      });
-
       try {
         List<String> suggestions = await _searchService.getSearchSuggestions(
           partialQuery,
@@ -350,14 +328,12 @@ class _SearchTabState extends State<SearchTab> {
         if (mounted) {
           setState(() {
             _searchSuggestions = suggestions;
-            _isLoadingSuggestions = false;
           });
         }
       } catch (e) {
         if (mounted) {
           setState(() {
             _searchSuggestions = [];
-            _isLoadingSuggestions = false;
           });
         }
       }
@@ -407,7 +383,6 @@ class _SearchTabState extends State<SearchTab> {
       _errorMessage = error;
       _hasError = true;
       _isSearching = false;
-      _isLoadingSuggestions = false;
     });
   }
 
@@ -428,28 +403,7 @@ class _SearchTabState extends State<SearchTab> {
     });
   }
 
-  /// 즐겨찾기 토글
-  Future<void> _toggleFavoriteSearch(String query) async {
-    await _searchService.toggleFavoriteSearch(query);
-    _favoriteSearches = await _searchService.getFavoriteSearches();
-    setState(() {});
-  }
 
-  /// 검색 결과 내보내기
-  Future<void> _exportSearchResults() async {
-    try {
-      String exportData = await _searchService.exportSearchResults(_filteredMusicians);
-      // TODO: 파일 다운로드 또는 공유 기능 구현
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('검색 결과가 내보내기되었습니다'),
-          backgroundColor: AppTheme.accentPink,
-        ),
-      );
-    } catch (e) {
-      _setError('검색 결과 내보내기 중 오류가 발생했습니다: $e');
-    }
-  }
 
   @override
   Widget build(BuildContext context) {

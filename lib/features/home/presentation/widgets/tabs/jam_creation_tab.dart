@@ -3,11 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
 import 'package:jamjamapp/core/services/auth_state_manager.dart';
-import 'package:jamjamapp/core/services/profile_image_manager.dart';
 import 'package:jamjamapp/core/services/app_state_manager.dart';
-import 'package:jamjamapp/features/home/presentation/widgets/user_profile_screen.dart';
+import 'package:jamjamapp/core/services/jam_service.dart';
+import '../screens/user_profile_screen.dart';
+import '../shared/jam_session_card.dart';
+import '../shared/participant_card.dart';
 import 'dart:async';
-import 'dart:io';
 
 class JamCreationTab extends StatefulWidget {
   const JamCreationTab({super.key});
@@ -26,10 +27,6 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
   final _maxParticipantsController = TextEditingController();
   
   bool _isCreating = false;
-  bool _isUploading = false;
-  
-  // 참여인원 수 설정
-  final int _maxParticipants = 5;
   
   // 실시간 업데이트 상태
   Timer? _realtimeUpdateTimer;
@@ -214,9 +211,6 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
     },
   ];
 
-  // 참여 신청 대기 목록
-  final List<Map<String, dynamic>> _pendingJoinRequests = [];
-
   @override
   void initState() {
     super.initState();
@@ -224,31 +218,35 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
     _startRealtimeUpdates();
   }
 
-  /// 잼 데이터 초기화 (ListView 안전성 보장)
+  /// 잼 데이터 초기화 (Supabase 우선, 폴백: 로컬/더미)
   void _initializeJamData() {
+    // 즉시 로컬 캐시 표시
     try {
       final currentJamSessions = _appStateManager.jamState['jamSessions'] as List<Map<String, dynamic>>?;
-      if (currentJamSessions == null || currentJamSessions.isEmpty) {
-        // 최초 실행 시 기본 더미 데이터 사용
-        _recentJamSessions = List<Map<String, dynamic>>.from(_defaultJamSessions);
-        _appStateManager.updateValue('jam', 'jamSessions', _recentJamSessions);
-        print('🎵 잼 탭: 기본 데이터 초기화 완료 (${_recentJamSessions.length}개 세션)');
-      } else {
-        // 기존 데이터 로드
+      if (currentJamSessions != null && currentJamSessions.isNotEmpty) {
         _recentJamSessions = List<Map<String, dynamic>>.from(currentJamSessions);
-        print('🎵 잼 탭: 기존 데이터 로드 완료 (${_recentJamSessions.length}개 세션)');
+      } else {
+        _recentJamSessions = List<Map<String, dynamic>>.from(_defaultJamSessions);
       }
-    } catch (e) {
-      print('❌ 잼 데이터 초기화 실패: $e');
-      // 안전한 폴백: 기본 데이터 사용
+    } catch (_) {
       _recentJamSessions = List<Map<String, dynamic>>.from(_defaultJamSessions);
     }
+
+    // Supabase 비동기 fetch
+    JamService.instance.fetchJamSessions().then((sessions) {
+      if (!mounted) return;
+      if (sessions.isNotEmpty) {
+        setState(() {
+          _recentJamSessions = sessions;
+        });
+        _appStateManager.updateValue('jam', 'jamSessions', _recentJamSessions);
+      }
+    }).catchError((_) {});
   }
 
   /// 잼 세션 데이터 저장
   void _saveJamSessions() {
     _appStateManager.updateValue('jam', 'jamSessions', _recentJamSessions);
-    print('💾 잼 세션 데이터 저장 완료: ${_recentJamSessions.length}개');
   }
 
   /// AppStateManager에서 데이터 동기화 (탭 재진입 시)
@@ -259,11 +257,9 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
         // 현재 데이터와 다르면 동기화
         if (_recentJamSessions.length != currentJamSessions.length) {
           _recentJamSessions = List<Map<String, dynamic>>.from(currentJamSessions);
-          print('🔄 잼 탭: AppStateManager와 데이터 동기화 완료 (${_recentJamSessions.length}개 세션)');
         }
       }
-    } catch (e) {
-      print('⚠️ 데이터 동기화 실패: $e');
+    } catch (e) { // ignore: empty_catches
     }
   }
 
@@ -332,7 +328,6 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
             jam['status'] = '진행 중';
           }
           
-          print('🔄 시뮬레이션: ${jam['title']} 참여자 ${participantsList.length}명');
         }
       });
     }
@@ -362,146 +357,7 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
   }
 
   /// 파일 업로드 (실제 파일 선택)
-  Future<void> _uploadFile() async {
-    setState(() {
-      _isUploading = true;
-    });
-
-    try {
-      // 파일 타입 선택 다이얼로그
-      final String? fileType = await _showFileTypeDialog();
-      if (fileType == null) {
-        setState(() {
-          _isUploading = false;
-        });
-        return;
-      }
-
-      XFile? pickedFile;
-      
-      switch (fileType) {
-        case 'image':
-          pickedFile = await _picker.pickImage(
-            source: ImageSource.gallery,
-            maxWidth: 1920,
-            maxHeight: 1080,
-            imageQuality: 85,
-          );
-          break;
-        case 'video':
-          pickedFile = await _picker.pickVideo(
-            source: ImageSource.gallery,
-            maxDuration: const Duration(minutes: 10),
-          );
-          break;
-        case 'audio':
-          // 웹에서는 파일 선택 다이얼로그 사용
-          pickedFile = await _picker.pickMedia();
-          break;
-        case 'document':
-          // 웹에서는 파일 선택 다이얼로그 사용
-          pickedFile = await _picker.pickMedia();
-          break;
-      }
-
-      if (pickedFile != null) {
-        // 파일 정보 가져오기
-        final file = File(pickedFile.path);
-        final fileSize = await file.length();
-        final fileName = pickedFile.name;
-        final fileExtension = fileName.split('.').last.toLowerCase();
-
-        // 파일 타입 결정
-        String fileType = 'document';
-        if (['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(fileExtension)) {
-          fileType = 'image';
-        } else if (['mp4', 'avi', 'mov', 'wmv'].contains(fileExtension)) {
-          fileType = 'video';
-        } else if (['mp3', 'wav', 'aac', 'flac'].contains(fileExtension)) {
-          fileType = 'audio';
-        }
-
-        setState(() {
-          _uploadedFiles.add({
-            'name': fileName,
-            'type': fileType,
-            'size': _formatFileSize(fileSize),
-            'path': pickedFile?.path ?? 'unknown_path',
-            'uploadTime': DateTime.now(),
-          });
-          _isUploading = false;
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$fileName 업로드 완료!'),
-            backgroundColor: AppTheme.accentPink,
-          ),
-        );
-      } else {
-        setState(() {
-          _isUploading = false;
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _isUploading = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('파일 업로드 중 오류가 발생했습니다: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
   /// 파일 타입 선택 다이얼로그
-  Future<String?> _showFileTypeDialog() {
-    return showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.secondaryBlack,
-        title: const Text(
-          '파일 타입 선택',
-          style: TextStyle(color: AppTheme.white),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildFileTypeOption('image', '이미지', Icons.image),
-            _buildFileTypeOption('video', '영상', Icons.videocam),
-            _buildFileTypeOption('audio', '음악', Icons.music_note),
-            _buildFileTypeOption('document', '문서', Icons.description),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('취소', style: TextStyle(color: AppTheme.grey)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 파일 타입 옵션 위젯
-  Widget _buildFileTypeOption(String type, String title, IconData icon) {
-    return ListTile(
-      leading: Icon(icon, color: AppTheme.accentPink),
-      title: Text(title, style: const TextStyle(color: AppTheme.white)),
-      onTap: () => Navigator.of(context).pop(type),
-    );
-  }
-
-  /// 파일 크기 포맷팅
-  String _formatFileSize(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
-  }
-
   /// Jam 세션 참여
   void _joinJamSession(Map<String, dynamic> jamSession) {
     // 로그인 상태 확인
@@ -638,8 +494,6 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
         jamSession['status'] = '진행 중';
       }
       
-      print('✅ 잼 참여 완료: ${jamSession['title']}');
-      print('✅ 새로운 참여자 수: ${participantsList.length}/${jamSession['maxParticipants']}');
     });
     _saveJamSessions();
     
@@ -871,31 +725,6 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
             ],
           ],
         ),
-      ),
-    );
-  }
-
-  /// 승인/거절 결과 표시
-  void _showApprovalResult(String action, String userName) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.secondaryBlack,
-        title: Text(
-          '$action 완료',
-          style: const TextStyle(color: AppTheme.white),
-        ),
-        content: Text(
-          '$userName님의 참여 신청을 $action했습니다.',
-          style: const TextStyle(color: AppTheme.white),
-        ),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(),
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentPink),
-            child: const Text('확인'),
-          ),
-        ],
       ),
     );
   }
@@ -1273,42 +1102,18 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
     });
 
     try {
-      // Jam 세션 생성 시뮬레이션
-      await Future.delayed(const Duration(seconds: 2));
+      final newJamSession = await JamService.instance.createJamSession(
+        title: _titleController.text,
+        description: _descriptionController.text,
+        instruments: _instrumentsController.text,
+        maxParticipants: int.tryParse(_maxParticipantsController.text) ?? 5,
+      );
 
-      if (mounted) {
-        // 새 Jam 세션 추가
-        final newJamSession = {
-          'id': DateTime.now().millisecondsSinceEpoch,
-          'title': _titleController.text,
-          'genre': _genreController.text,
-          'instruments': _instrumentsController.text,
-          'participants': 1,
-          'maxParticipants': int.tryParse(_maxParticipantsController.text) ?? 5,
-          'status': '모집 중',
-          'createdBy': AuthStateManager.instance.userName,
-          'createdAt': '방금 전',
-          'description': _descriptionController.text,
-          'tags': _genreController.text.split(',').map((e) => e.trim()).toList(),
-          'isLive': false,
-          'recordingUrl': null,
-          'files': _uploadedFiles,
-          'mediaData': _uploadedMediaData,
-          'mediaType': _uploadedMediaType,
-          'chat': [],
-          // 🔄 동적 participants 리스트 추가
-          'participantsList': [
-            {
-              'id': 1,
-              'name': AuthStateManager.instance.userName,
-              'avatar': '👤',
-              'role': '방장',
-              'instruments': ['기타', '피아노'],
-              'isOnline': true,
-              'joinTime': '방금 전',
-            }
-          ],
-        };
+      if (mounted && newJamSession != null) {
+        // 로컬 파일/미디어 필드 보강
+        newJamSession['files'] = _uploadedFiles;
+        newJamSession['mediaData'] = _uploadedMediaData;
+        newJamSession['mediaType'] = _uploadedMediaType;
 
         setState(() {
           _recentJamSessions.insert(0, newJamSession);
@@ -1327,7 +1132,6 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
 
         Navigator.of(context).pop(); // 모달 닫기
 
-        print('✅ 잼 세션 생성 완료 - UI 업데이트 중...');
         
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -1336,11 +1140,8 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
           ),
         );
         
-        print('✅ 잼 세션 생성 완료 - 모든 UI 업데이트 완료');
       }
     } catch (e) {
-      print('❌ 잼 세션 생성 중 오류: $e');
-      print('❌ 스택 트레이스: ${StackTrace.current}');
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1377,7 +1178,6 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
         ),
       );
     } catch (e) {
-      print('❌ 사용자 프로필 화면 오류: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('프로필 화면을 불러올 수 없습니다: $e'),
@@ -1406,8 +1206,6 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
     final List<Map<String, dynamic>> participants = 
         List<Map<String, dynamic>>.from(jamSession['participantsList'] ?? []);
     
-    print('✅ 잼 세션 ${jamSession['title']} 참여자 수: ${participants.length}');
-    print('✅ 잼 세션 participants 숫자: ${jamSession['participants']}');
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.9,
@@ -1595,7 +1393,15 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
               itemCount: participants.length,
               itemBuilder: (context, index) {
                 final participant = participants[index];
-                return _buildParticipantCard(participant, jamSession: jamSession);
+                return ParticipantCard(
+                  participant: participant,
+                  jamSession: jamSession,
+                  onShowProfile: () {
+                    Navigator.of(context).pop();
+                    _showUserProfile(participant['name']);
+                  },
+                  onKick: () => _kickParticipant(jamSession, participant),
+                );
               },
             ),
           ),
@@ -1713,397 +1519,6 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
     );
   }
 
-  /// 참여자 카드 위젯 (길게 누르기로 내보내기 지원)
-  Widget _buildParticipantCard(Map<String, dynamic> participant, {Map<String, dynamic>? jamSession}) {
-    final currentUser = AuthStateManager.instance.userName;
-    final isCurrentUser = participant['name'] == currentUser;
-    final isHost = participant['role'] == '방장';
-    final canKick = jamSession != null && 
-                   !isCurrentUser && 
-                   !isHost && 
-                   jamSession['participantsList'].any((p) => p['name'] == currentUser && p['role'] == '방장');
-    
-    return Card(
-      color: AppTheme.primaryBlack,
-      margin: const EdgeInsets.only(bottom: 8),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onLongPress: canKick ? () => _kickParticipant(jamSession, participant) : null,
-        child: ListTile(
-          leading: Stack(
-          children: [
-            // ProfileImageManager를 사용한 프로필 이미지 표시
-            participant['name'] == AuthStateManager.instance.userName
-                ? ProfileImageManager.instance.buildProfileImage(
-                    radius: 20,
-                    placeholder: CircleAvatar(
-                      radius: 20,
-                      backgroundColor: AppTheme.accentPink,
-                      child: Text(
-                        participant['avatar'],
-                        style: const TextStyle(fontSize: 16),
-                      ),
-                    ),
-                  )
-                : CircleAvatar(
-                    radius: 20,
-                    backgroundColor: AppTheme.accentPink,
-                    child: Text(
-                      participant['avatar'],
-                      style: const TextStyle(fontSize: 16),
-                    ),
-                  ),
-            if (participant['isOnline'])
-              Positioned(
-                right: 0,
-                bottom: 0,
-                child: Container(
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: Colors.green,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppTheme.primaryBlack, width: 2),
-                  ),
-                ),
-              ),
-          ],
-        ),
-          title: Row(
-          children: [
-            Text(
-              participant['name'],
-              style: const TextStyle(color: AppTheme.white),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: participant['role'] == '방장' 
-                    ? AppTheme.accentPink 
-                    : AppTheme.grey.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                participant['role'],
-                style: TextStyle(
-                  color: participant['role'] == '방장' 
-                      ? AppTheme.white 
-                      : AppTheme.grey,
-                  fontSize: 10,
-                ),
-              ),
-            ),
-          ],
-        ),
-          subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '악기: ${participant['instruments'].join(', ')}',
-              style: const TextStyle(color: AppTheme.grey),
-            ),
-            Text(
-              '참여: ${participant['joinTime']}',
-              style: const TextStyle(color: AppTheme.grey, fontSize: 10),
-            ),
-          ],
-        ),
-          trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // 내보내기 가능한 참여자 표시
-            if (canKick)
-              const Icon(
-                Icons.touch_app,
-                color: AppTheme.grey,
-                size: 16,
-              ),
-            IconButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _showUserProfile(participant['name']);
-              },
-              icon: const Icon(Icons.person, color: AppTheme.accentPink),
-            ),
-          ],
-        ),
-        ),
-      ),
-    );
-  }
-
-  /// Jam 채팅 보기
-  void _showJamChat(Map<String, dynamic> jamSession) {
-    // 시뮬레이션된 채팅 메시지 데이터
-    List<Map<String, dynamic>> chatMessages = [
-      {
-        'id': 1,
-        'user': 'JamMaster',
-        'message': '안녕하세요! Jam 세션에 오신 것을 환영합니다! 🎵',
-        'time': '14:30',
-        'isMe': false,
-      },
-      {
-        'id': 2,
-        'user': 'GuitarHero3',
-        'message': '안녕하세요! 기타 연주 준비되었습니다 🎸',
-        'time': '14:31',
-        'isMe': false,
-      },
-      {
-        'id': 3,
-        'user': 'Drummer5',
-        'message': '드럼 세팅 완료! 🥁',
-        'time': '14:32',
-        'isMe': false,
-      },
-      {
-        'id': 4,
-        'user': '락스타',
-        'message': '저도 참여할게요! 피아노 연주하겠습니다 🎹',
-        'time': '14:33',
-        'isMe': true,
-      },
-    ];
-
-    final TextEditingController messageController = TextEditingController();
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
-          return AlertDialog(
-            backgroundColor: AppTheme.secondaryBlack,
-            title: Row(
-              children: [
-                Text(
-                  '${jamSession['title']} 채팅',
-                  style: const TextStyle(color: AppTheme.white),
-                ),
-                const Spacer(),
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close, color: AppTheme.white),
-                ),
-              ],
-            ),
-            content: SizedBox(
-              width: double.maxFinite,
-              height: 400,
-              child: Column(
-                children: [
-                  // 채팅 메시지 영역
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryBlack,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: ListView.builder(
-                        reverse: true,
-                        itemCount: chatMessages.length,
-                        itemBuilder: (context, index) {
-                          final message = chatMessages[chatMessages.length - 1 - index];
-                          return _buildChatMessage(message);
-                        },
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // 메시지 입력 영역
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: messageController,
-                          decoration: const InputDecoration(
-                            hintText: '메시지를 입력하세요...',
-                            hintStyle: TextStyle(color: AppTheme.grey),
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          ),
-                          style: const TextStyle(color: AppTheme.white),
-                          onSubmitted: (value) {
-                            if (value.trim().isNotEmpty) {
-                              _sendChatMessage(value, chatMessages, setState, messageController);
-                            }
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        onPressed: () {
-                          if (messageController.text.trim().isNotEmpty) {
-                            _sendChatMessage(messageController.text, chatMessages, setState, messageController);
-                          }
-                        },
-                        icon: const Icon(Icons.send, color: AppTheme.accentPink),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  /// 채팅 메시지 위젯
-  Widget _buildChatMessage(Map<String, dynamic> message) {
-    final isMe = message['isMe'] ?? false;
-    
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: Row(
-        mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (!isMe) ...[
-            // ProfileImageManager를 사용한 프로필 이미지 표시
-            message['user'] == AuthStateManager.instance.userName
-                ? ProfileImageManager.instance.buildProfileImage(
-                    radius: 16,
-                    placeholder: CircleAvatar(
-                      radius: 16,
-                      backgroundColor: AppTheme.accentPink,
-                      child: Text(
-                        message['user'][0],
-                        style: const TextStyle(color: AppTheme.white, fontSize: 12),
-                      ),
-                    ),
-                  )
-                : CircleAvatar(
-                    radius: 16,
-                    backgroundColor: AppTheme.accentPink,
-                    child: Text(
-                      message['user'][0],
-                      style: const TextStyle(color: AppTheme.white, fontSize: 12),
-                    ),
-                  ),
-            const SizedBox(width: 8),
-          ],
-          Flexible(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: isMe ? AppTheme.accentPink : AppTheme.primaryBlack,
-                borderRadius: BorderRadius.circular(16),
-                border: isMe ? null : Border.all(color: AppTheme.grey.withValues(alpha: 0.3)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (!isMe)
-                    Text(
-                      message['user'],
-                      style: TextStyle(
-                        color: isMe ? AppTheme.white : AppTheme.accentPink,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  if (!isMe) const SizedBox(height: 4),
-                  Text(
-                    message['message'],
-                    style: TextStyle(
-                      color: isMe ? AppTheme.white : AppTheme.white,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    message['time'],
-                    style: TextStyle(
-                      color: isMe ? AppTheme.white.withValues(alpha: 0.7) : AppTheme.grey,
-                      fontSize: 10,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (isMe) ...[
-            const SizedBox(width: 8),
-            // ProfileImageManager를 사용한 프로필 이미지 표시
-            ProfileImageManager.instance.buildProfileImage(
-              radius: 16,
-              placeholder: CircleAvatar(
-                radius: 16,
-                backgroundColor: AppTheme.accentPink,
-                child: Text(
-                  message['user'][0],
-                  style: const TextStyle(color: AppTheme.white, fontSize: 12),
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  /// 채팅 메시지 전송
-  void _sendChatMessage(
-    String message,
-    List<Map<String, dynamic>> chatMessages,
-    StateSetter setState,
-    TextEditingController controller,
-  ) {
-    if (message.trim().isEmpty) return;
-
-    // 새 메시지 추가
-    final newMessage = {
-      'id': chatMessages.length + 1,
-      'user': '락스타', // 현재 사용자
-      'message': message.trim(),
-      'time': _getCurrentTime(),
-      'isMe': true,
-    };
-
-    setState(() {
-      chatMessages.add(newMessage);
-    });
-
-    // 입력 필드 초기화
-    controller.clear();
-
-    // 시뮬레이션된 응답 메시지 (1-2초 후)
-    Future.delayed(const Duration(seconds: 1), () {
-      if (mounted) {
-        final responses = [
-          '좋은 아이디어네요! 👍',
-          '저도 동의합니다! 🎵',
-          '멋진 연주였어요! 👏',
-          '다음 곡은 뭐로 할까요? 🎼',
-          '리듬이 정말 좋았어요! 🥁',
-        ];
-        
-        final randomResponse = responses[DateTime.now().millisecond % responses.length];
-        final responseMessage = {
-          'id': chatMessages.length + 1,
-          'user': 'GuitarHero3',
-          'message': randomResponse,
-          'time': _getCurrentTime(),
-          'isMe': false,
-        };
-
-        setState(() {
-          chatMessages.add(responseMessage);
-        });
-      }
-    });
-  }
-
-  /// 현재 시간 포맷
-  String _getCurrentTime() {
-    final now = DateTime.now();
-    return '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
-  }
-
   /// 파일 업로드 모달 표시
   void _showFileUploadModal(String type) async {
     setState(() {
@@ -2140,6 +1555,7 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
         });
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('파일 업로드 중 오류가 발생했습니다: $e'),
@@ -2274,7 +1690,12 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
                     padding: const EdgeInsets.all(16),
                     itemCount: filteredSessions.length,
                     itemBuilder: (context, index) {
-                      return _buildJamSessionCard(context, filteredSessions[index]);
+                      return JamSessionCard(
+                        jamSession: filteredSessions[index],
+                        onJoin: () => _joinJamSession(filteredSessions[index]),
+                        onShowDetails: () => _showJamDetails(filteredSessions[index]),
+                        onShowProfile: () => _showUserProfile(filteredSessions[index]['createdBy']),
+                      );
                     },
                   ),
           ),
@@ -2324,169 +1745,6 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildJamSessionCard(BuildContext context, Map<String, dynamic> jamSession) {
-    // 🔄 동적 참여자 수 계산
-    final participantsList = List<Map<String, dynamic>>.from(jamSession['participantsList'] ?? []);
-    final actualParticipants = participantsList.length;
-    
-    return Card(
-      color: AppTheme.secondaryBlack,
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 헤더
-            Row(
-              children: [
-                GestureDetector(
-                  onTap: () => _showUserProfile(jamSession['createdBy']),
-                  child: jamSession['createdBy'] == AuthStateManager.instance.userName
-                      ? ProfileImageManager.instance.buildProfileImage(
-                          radius: 20,
-                          placeholder: CircleAvatar(
-                            radius: 20,
-                            backgroundColor: AppTheme.accentPink,
-                            child: const Icon(Icons.person, color: AppTheme.white, size: 20),
-                          ),
-                        )
-                      : CircleAvatar(
-                          radius: 20,
-                          backgroundColor: AppTheme.accentPink,
-                          child: const Icon(Icons.person, color: AppTheme.white, size: 20),
-                        ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        jamSession['title'],
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: AppTheme.white,
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () => _showUserProfile(jamSession['createdBy']),
-                        child: Text(
-                          '${jamSession['createdBy']} • ${jamSession['createdAt']}',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: AppTheme.grey,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // 상태 표시
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: _getStatusColor(jamSession['status']),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    jamSession['status'],
-                    style: const TextStyle(
-                      color: AppTheme.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            
-            // 설명
-            Text(
-              jamSession['description'],
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: AppTheme.white,
-              ),
-            ),
-            const SizedBox(height: 12),
-            
-            // 태그
-            Wrap(
-              spacing: 4,
-              children: jamSession['tags'].take(3).map<Widget>((tag) {
-                return Chip(
-                  label: Text(
-                    tag,
-                    style: const TextStyle(fontSize: 10),
-                  ),
-                  backgroundColor: AppTheme.accentPink.withValues(alpha: 0.2),
-                  labelStyle: const TextStyle(color: AppTheme.accentPink),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 12),
-            
-            // 정보 행
-            Row(
-              children: [
-                Icon(Icons.music_note, size: 16, color: AppTheme.grey),
-                const SizedBox(width: 4),
-                Text(
-                  jamSession['genre'],
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppTheme.grey,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Icon(Icons.people, size: 16, color: AppTheme.grey),
-                const SizedBox(width: 4),
-                Text(
-                  '$actualParticipants/${jamSession['maxParticipants']} 참여',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppTheme.grey,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Icon(Icons.music_note, size: 16, color: AppTheme.grey),
-                const SizedBox(width: 4),
-                Text(
-                  jamSession['instruments'],
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppTheme.grey,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            
-            // 액션 버튼
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => _joinJamSession(jamSession),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppTheme.accentPink,
-                      side: const BorderSide(color: AppTheme.accentPink),
-                    ),
-                    child: const Text('참여 신청'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => _showJamDetails(jamSession),
-                    style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentPink),
-                    child: const Text('상세 보기'),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -2625,7 +1883,6 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
   void _executeLeaveJamSession(Map<String, dynamic> jamSession, int participantIndex) {
     setState(() {
       final participantsList = List<Map<String, dynamic>>.from(jamSession['participantsList'] ?? []);
-      final leavingParticipant = participantsList[participantIndex];
       
       // participantsList에서 제거
       participantsList.removeAt(participantIndex);
@@ -2639,7 +1896,6 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
         jamSession['status'] = '모집 중';
       }
       
-      print('🚪 참여자 나가기 완료: ${leavingParticipant['name']} (남은 인원: ${participantsList.length}명)');
     });
     _saveJamSessions();
     
@@ -2724,7 +1980,6 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
         jamSession['status'] = '모집 중';
       }
       
-      print('👑 참여자 내보내기 완료: ${participant['name']} (남은 인원: ${participantsList.length}명)');
     });
     _saveJamSessions();
     
@@ -2759,9 +2014,7 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
         _recentJamSessions = jamSessions.cast<Map<String, dynamic>>();
       });
       
-      print('🔄 잼 세션 데이터 다시 로드 완료: ${_recentJamSessions.length}개');
-    } catch (e) {
-      print('❌ 잼 세션 데이터 로드 실패: $e');
+    } catch (e) { // ignore: empty_catches
     }
   }
 } 

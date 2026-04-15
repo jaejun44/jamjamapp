@@ -359,13 +359,15 @@ class _ShareModalState extends State<ShareModal> {
     final feedTitle = widget.feed['title'] ?? '피드';
     final feedAuthor = widget.feed['author'] ?? '작성자';
     final feedId = widget.feed['id'] as int;
-    
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+
     // 공유할 텍스트 생성
     final shareText = '🎵 JamJam에서 "$feedTitle" by $feedAuthor\n\n'
         '음악을 함께 만들어보세요! #JamJam #음악협업';
     final shareUrl = 'https://jamjam.app/feed/$feedId'; // 실제 앱 URL로 변경 필요
     final fullShareText = '$shareText\n\n$shareUrl';
-    
+
     try {
       switch (platform) {
         case 'copy':
@@ -393,14 +395,13 @@ class _ShareModalState extends State<ShareModal> {
           await _shareGeneral(fullShareText);
           break;
       }
-      
+
       // CounterService에 공유 카운트 증가
       await CounterService.instance.incrementShareCount(feedId);
-      
-      Navigator.of(context).pop();
+
+      navigator.pop();
     } catch (e) {
-      print('❌ 공유 실패: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: Text('공유 중 오류가 발생했습니다: ${e.toString()}'),
           backgroundColor: Colors.red,
@@ -412,8 +413,9 @@ class _ShareModalState extends State<ShareModal> {
 
   /// 클립보드에 복사
   Future<void> _copyToClipboard(String url) async {
+    final messenger = ScaffoldMessenger.of(context);
     await Clipboard.setData(ClipboardData(text: url));
-    ScaffoldMessenger.of(context).showSnackBar(
+    messenger.showSnackBar(
       const SnackBar(
         content: Text('링크가 클립보드에 복사되었습니다!'),
         backgroundColor: AppTheme.accentPink,
@@ -436,8 +438,9 @@ class _ShareModalState extends State<ShareModal> {
 
   /// 인스타그램 공유 (텍스트만)
   Future<void> _shareToInstagram(String text) async {
+    final messenger = ScaffoldMessenger.of(context);
     await Share.share(text);
-    ScaffoldMessenger.of(context).showSnackBar(
+    messenger.showSnackBar(
       const SnackBar(
         content: Text('인스타그램 앱에서 스토리나 포스트로 공유해주세요!'),
         backgroundColor: AppTheme.accentPink,
@@ -471,10 +474,11 @@ class _ShareModalState extends State<ShareModal> {
 
   /// URL 실행
   Future<void> _launchUrl(String url, String platformName) async {
+    final messenger = ScaffoldMessenger.of(context);
     final uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: Text('$platformName으로 공유되었습니다!'),
           backgroundColor: AppTheme.accentPink,

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
-import 'user_profile_screen.dart';
+import '../screens/user_profile_screen.dart';
 
 class SocialFollowModal extends StatefulWidget {
   final String type; // 'followers' or 'following'

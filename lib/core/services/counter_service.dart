@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:collection';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 좋아요, 댓글, 공유 등 모든 카운트를 중앙에서 관리하는 서비스
@@ -27,12 +26,9 @@ class CounterService {
   /// 서비스 초기화
   Future<void> initialize() async {
     try {
-      print('🔢 CounterService 초기화 시작...');
       await _loadCountersFromStorage();
       await _loadUserLikesFromStorage();
-      print('✅ CounterService 초기화 완료');
-    } catch (e) {
-      print('❌ CounterService 초기화 실패: $e');
+    } catch (e) { // ignore: empty_catches
     }
   }
 
@@ -45,7 +41,6 @@ class CounterService {
       if (data != null) {
         final decoded = jsonDecode(data) as Map<String, dynamic>;
         _counters[type] = decoded.map((k, v) => MapEntry(int.parse(k), v as int));
-        print('📊 $type 카운터 로드: ${_counters[type]!.length}개');
       }
     }
   }
@@ -65,7 +60,6 @@ class CounterService {
           _userLikes[entry.key]![int.parse(e.key)] = e.value as bool;
         }
       }
-      print('👤 사용자 좋아요 상태 로드: ${_userLikes.length}명');
     }
   }
 
@@ -122,10 +116,8 @@ class CounterService {
       // 리스너들에게 알림
       _notifyListeners('likes', feedId, _counters['likes']![feedId]!);
       
-      print('👍 좋아요 토글: feedId=$feedId, userId=$userId, liked=$newUserLiked, count=$newCount');
       return newUserLiked;
     } catch (e) {
-      print('❌ 좋아요 토글 실패: $e');
       return getUserLikeStatus(userId, feedId);
     }
   }
@@ -136,9 +128,7 @@ class CounterService {
       _counters['comments']![feedId] = newCount;
       await _saveCountersToStorage();
       _notifyListeners('comments', feedId, newCount);
-      print('💬 댓글 카운트 업데이트: feedId=$feedId, count=$newCount');
-    } catch (e) {
-      print('❌ 댓글 카운트 업데이트 실패: $e');
+    } catch (e) { // ignore: empty_catches
     }
   }
 
@@ -150,9 +140,7 @@ class CounterService {
       _counters['shares']![feedId] = newCount;
       await _saveCountersToStorage();
       _notifyListeners('shares', feedId, newCount);
-      print('🔗 공유 카운트 증가: feedId=$feedId, count=$newCount');
-    } catch (e) {
-      print('❌ 공유 카운트 증가 실패: $e');
+    } catch (e) { // ignore: empty_catches
     }
   }
 
@@ -163,9 +151,7 @@ class CounterService {
       _counters['comments']![feedId] = comments;
       _counters['shares']![feedId] = shares;
       await _saveCountersToStorage();
-      print('🆕 피드 카운트 초기화: feedId=$feedId, likes=$likes, comments=$comments, shares=$shares');
-    } catch (e) {
-      print('❌ 피드 카운트 초기화 실패: $e');
+    } catch (e) { // ignore: empty_catches
     }
   }
 
@@ -184,8 +170,7 @@ class CounterService {
     for (final listener in _listeners) {
       try {
         listener(type, id, newCount);
-      } catch (e) {
-        print('❌ 리스너 알림 실패: $e');
+      } catch (e) { // ignore: empty_catches
       }
     }
   }
@@ -208,17 +193,11 @@ class CounterService {
       }
       await prefs.remove('user_likes');
       
-      print('🗑️ 모든 카운트 데이터 초기화 완료');
-    } catch (e) {
-      print('❌ 카운트 데이터 초기화 실패: $e');
+    } catch (e) { // ignore: empty_catches
     }
   }
 
   /// 디버그: 현재 상태 출력
   void printDebugInfo() {
-    print('🔢 === CounterService 디버그 정보 ===');
-    print('카운터: $_counters');
-    print('사용자 좋아요: $_userLikes');
-    print('리스너 수: ${_listeners.length}');
   }
 }

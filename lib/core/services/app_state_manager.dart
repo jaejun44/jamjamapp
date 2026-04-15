@@ -1,6 +1,4 @@
 import 'dart:convert';
-import 'dart:collection';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
@@ -109,7 +107,6 @@ class AppStateManager {
 
   /// 상태 변화 알림
   void _notifyStateChange(String section, dynamic newState) {
-    print('🔍 앱 상태 변화 알림 - 섹션: $section');
     for (final callback in _stateChangeCallbacks) {
       callback(section, newState);
     }
@@ -117,7 +114,6 @@ class AppStateManager {
 
   /// 특정 섹션의 상태 업데이트
   Future<void> updateState(String section, Map<String, dynamic> newState) async {
-    print('🔍 앱 상태 업데이트 시작 - 섹션: $section');
     
     // 상태 업데이트
     _appState[section] = {..._appState[section], ...newState};
@@ -128,7 +124,6 @@ class AppStateManager {
     // 상태 변화 알림
     _notifyStateChange(section, _appState[section]);
     
-    print('✅ 앱 상태 업데이트 완료 - 섹션: $section');
   }
 
   /// 특정 섹션의 상태 가져오기 - GPT 권장: LinkedHashMap 제거
@@ -139,7 +134,6 @@ class AppStateManager {
 
   /// 특정 키의 값 업데이트
   Future<void> updateValue(String section, String key, dynamic value) async {
-    print('🔍 앱 상태 값 업데이트 - 섹션: $section, 키: $key');
     
     // 상태 업데이트
     _appState[section][key] = value;
@@ -153,34 +147,25 @@ class AppStateManager {
     // 상태 변화 알림
     _notifyStateChange(section, _appState[section]);
     
-    print('✅ 앱 상태 값 업데이트 완료 - 섹션: $section, 키: $key');
   }
 
   /// 앱 시작 시 상태 초기화
   Future<void> initializeAppState() async {
-    print('🔍 AppStateManager 초기화 시작');
     
     try {
       // 🔐 AuthStateManager 초기화 완료 대기 (중요!)
       // 로그인 상태가 확정된 후에 사용자별 데이터를 로드해야 함
-      print('🔐 인증 상태 확인 중...');
       await Future.delayed(Duration(milliseconds: 100)); // AuthStateManager 완료 대기
-      
-      final currentUserId = _getCurrentUserId();
-      print('🔑 확정된 사용자 ID: $currentUserId');
-      
+
       // SharedPreferences에서 저장된 상태 로드
       await _loadStateFromStorage();
       
-      print('✅ AppStateManager 초기화 완료');
       
       // 🔄 모든 UI 동기화를 위한 전역 상태 변화 알림
-      print('🔄 초기화 완료 후 UI 전체 동기화 시작');
       for (final section in _appState.keys) {
         _notifyStateChange(section, _appState[section]);
       }
-    } catch (e) {
-      print('❌ AppStateManager 초기화 실패: $e');
+    } catch (e) { // ignore: empty_catches
     }
   }
 
@@ -200,20 +185,15 @@ class AppStateManager {
       // 🧪 저장 성공 여부 확인
       final success = await prefs.setString(userKey, stateJson);
       if (success) {
-        print('✅ 상태 저장 성공 - 섹션: $section, 크기: ${stateJson.length} chars');
         
         // 🔍 저장 직후 즉시 확인 (commit 없이)
         final saved = prefs.getString(userKey);
         if (saved != null && saved == stateJson) {
-          print('✅ 저장 검증 성공 - 사용자: $currentUserId, 섹션: $section');
         } else {
-          print('❌ 저장 검증 실패 - 사용자: $currentUserId, 섹션: $section, 저장됨: ${saved?.length ?? 0} chars');
         }
       } else {
-        print('❌ 상태 저장 실패 - 섹션: $section, setString() returned false');
       }
-    } catch (e) {
-      print('❌ 상태 저장 실패 - 섹션: $section, 오류: $e');
+    } catch (e) { // ignore: empty_catches
     }
   }
 
@@ -233,26 +213,20 @@ class AppStateManager {
     // 마이그레이션 완료 플래그 확인
     final migrationKey = 'migration_completed_$currentUserId';
     if (prefs.getBool(migrationKey) == true) {
-      print('✅ 데이터 마이그레이션 이미 완료됨 - 사용자: $currentUserId');
       return;
     }
     
-    print('🔄 기존 데이터 마이그레이션 시작 - 사용자: $currentUserId');
     
     // 이전 키 형태의 데이터를 새로운 키로 이동
     final oldKeys = ['app_state_home', 'app_state_search', 'app_state_jam', 'app_state_chat', 'app_state_settings'];
-    int migratedCount = 0;
-    
     for (final oldKey in oldKeys) {
       final oldData = prefs.getString(oldKey);
       if (oldData != null) {
         final section = oldKey.replaceFirst('app_state_', '');
         final newKey = 'app_state_${currentUserId}_$section';
-        
+
         // 새로운 키로 데이터 복사
         await prefs.setString(newKey, oldData);
-        print('📦 마이그레이션: $oldKey → $newKey');
-        migratedCount++;
       }
     }
     
@@ -264,15 +238,12 @@ class AppStateManager {
         if (authData != null) {
           final newAuthKey = 'auth_${currentUserId}_$authKey';
           await prefs.setString(newAuthKey, authData);
-          print('🔐 프로필 마이그레이션: $authKey → $newAuthKey');
-          migratedCount++;
         }
       }
     }
     
     // 마이그레이션 완료 플래그 설정
     await prefs.setBool(migrationKey, true);
-    print('✅ 데이터 마이그레이션 완료 - $migratedCount개 항목');
   }
 
   /// SharedPreferences에서 상태 로드 - 사용자별 키 시스템 + 기존 데이터 마이그레이션
@@ -281,15 +252,9 @@ class AppStateManager {
     
     // 🔑 현재 로그인된 사용자 ID 가져오기
     final currentUserId = _getCurrentUserId();
-    print('🔑 현재 사용자 ID: $currentUserId');
     
     // 🔄 기존 데이터 마이그레이션 (한 번만 실행)
     await _migrateOldDataIfNeeded(prefs, currentUserId);
-    
-    // 🔍 저장된 모든 키 확인
-    final allKeys = prefs.getKeys();
-    final userStateKeys = allKeys.where((key) => key.startsWith('app_state_${currentUserId}_')).toList();
-    print('🔍 현재 사용자의 저장된 상태 키들: $userStateKeys');
     
     // 각 섹션별로 저장된 상태 로드
     for (final section in _appState.keys) {
@@ -297,13 +262,10 @@ class AppStateManager {
       
       // 🧪 상세한 저장 상태 확인
       if (savedState == null) {
-        print('❌ 저장된 상태 없음 - 섹션: $section (완전히 null)');
         continue;
       } else if (savedState.isEmpty) {
-        print('❌ 저장된 상태 없음 - 섹션: $section (빈 문자열)');
         continue;
       } else {
-        print('✅ 저장된 상태 발견 - 섹션: $section, 크기: ${savedState.length} chars');
       }
       
       try {
@@ -313,25 +275,15 @@ class AppStateManager {
         // 중첩된 구조도 LinkedHashMap으로 변환
         final convertedState = _convertToLinkedHashMap(restoredState);
         
-        // 🔍 기존 상태 백업
-        final originalState = Map<String, dynamic>.from(_appState[section]);
-        
         // 기존 상태에 복원된 상태 병합 - 타입 안전성을 위해 개별 할당
         convertedState.forEach((key, value) {
           _appState[section]![key] = value;
         });
         
-        print('✅ 상태 복원 완료 - 섹션: $section, 항목: ${restoredState.keys.length}개');
-        print('📦 복원된 키들: ${restoredState.keys}');
-        print('🔄 병합 전 키들: ${originalState.keys}');
-        print('🔄 병합 후 키들: ${_appState[section]!.keys}');
         
         // 🔄 UI 강제 업데이트를 위한 상태 변화 알림
-        print('🔄 UI 동기화를 위한 상태 변화 알림 - 섹션: $section');
         _notifyStateChange(section, _appState[section]);
-      } catch (e) {
-        print('❌ 상태 로드 실패 - 섹션: $section, 오류: $e');
-        print('📄 원본 데이터: $savedState');
+      } catch (e) { // ignore: empty_catches
       }
     }
   }
@@ -345,14 +297,12 @@ class AppStateManager {
         // 🔧 int key → String key 변환 (JSON 호환)
         serializable[key.toString()] = _makeSerializable(val);
       });
-      print('🔧 Map 직렬화: ${value.runtimeType} → Map<String, dynamic> (키 ${value.length}개)');
       return serializable;
     }
     
     // 📋 Set → List 변환 (JSON은 Set을 지원하지 않음)
     if (value is Set) {
       final list = value.map(_makeSerializable).toList();
-      print('🔧 Set 직렬화: ${value.runtimeType} → List (요소 ${value.length}개)');
       return list;
     }
     
@@ -363,7 +313,6 @@ class AppStateManager {
     
     // 🖼️ MemoryImage → Base64 변환
     if (value is MemoryImage) {
-      print('🖼️ MemoryImage 직렬화: ${value.bytes.length} bytes → Base64');
       return {
         '_type': 'MemoryImage',
         '_data': base64Encode(value.bytes),
@@ -372,7 +321,6 @@ class AppStateManager {
     
     // 🖼️ ImageProvider → 문자열 변환
     if (value is ImageProvider) {
-      print('🖼️ ImageProvider 직렬화: $value → 기본 아바타');
       return {
         '_type': 'ImageProvider',
         '_data': '👤', // 기본 아바타 문자열
@@ -381,7 +329,6 @@ class AppStateManager {
     
     // 🛡️ 알 수 없는 객체 타입 안전 처리
     if (value != null && value is! String && value is! int && value is! bool && value is! double) {
-      print('⚠️ 직렬화 불가능한 타입 감지: ${value.runtimeType} → 문자열로 변환');
       return value.toString();
     }
     
@@ -396,10 +343,8 @@ class AppStateManager {
       if (value['_type'] == 'MemoryImage' && value['_data'] is String) {
         try {
           final bytes = base64Decode(value['_data'] as String);
-          print('🖼️ MemoryImage 복원: Base64 → ${bytes.length} bytes');
           return MemoryImage(bytes);
         } catch (e) {
-          print('❌ MemoryImage 복원 실패: $e');
           return '👤'; // 기본 아바타로 대체
         }
       } else if (value['_type'] == 'ImageProvider') {
@@ -411,14 +356,12 @@ class AppStateManager {
       value.forEach((key, val) {
         safeMap[key.toString()] = _convertToLinkedHashMap(val);
       });
-      print('🔧 Map 복원: ${value.length}개 키 → Map<String, dynamic>');
       return safeMap;
     } 
     
     if (value is List) {
       // 📋 타입 안전성을 위한 List 변환 - 내용에 따라 적절한 타입으로 캐스팅
       final convertedList = value.map((item) => _convertToLinkedHashMap(item)).toList();
-      print('🔧 List 복원: ${value.length}개 요소');
       
       // 🔍 리스트 내용을 기반으로 적절한 타입 결정
       if (convertedList.isNotEmpty) {
@@ -428,7 +371,6 @@ class AppStateManager {
           try {
             return convertedList.cast<String>();
           } catch (e) {
-            print('⚠️ List<String> 캐스팅 실패, List<dynamic> 반환');
             return convertedList;
           }
         } else if (firstItem is Map) {
@@ -436,7 +378,6 @@ class AppStateManager {
           try {
             return convertedList.cast<Map<String, dynamic>>();
           } catch (e) {
-            print('⚠️ List<Map> 캐스팅 실패, List<dynamic> 반환');
             return convertedList;
           }
         } else if (firstItem is int) {
@@ -444,7 +385,6 @@ class AppStateManager {
           try {
             return convertedList.cast<int>();
           } catch (e) {
-            print('⚠️ List<int> 캐스팅 실패, List<dynamic> 반환');
             return convertedList;
           }
         }
@@ -482,17 +422,8 @@ class AppStateManager {
         await prefs.setString('app_state_${currentUserId}_${section}_$key', jsonValue);
       }
       
-      print('💾 개별 값 저장 완료 - 사용자: $currentUserId, $section.$key');
-    } catch (e) {
-      print('❌ 개별 값 저장 실패 - $section.$key: $e');
+    } catch (e) { // ignore: empty_catches
     }
   }
 
-  /// 현재 상태 정보 출력 (디버깅용)
-  void printCurrentState() {
-    print('🔍 현재 앱 상태:');
-    for (final entry in _appState.entries) {
-      print('  - ${entry.key}: ${entry.value}');
-    }
-  }
 } 

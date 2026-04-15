@@ -2,15 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
 import 'package:jamjamapp/core/services/auth_state_manager.dart';
 import 'package:jamjamapp/core/services/profile_image_manager.dart';
-import '../../../auth/presentation/widgets/login_modal.dart';
-import '../../../auth/presentation/widgets/backend_test_modal.dart';
-import 'profile_edit_modal.dart';
-import 'social_follow_modal.dart';
-import 'profile_settings_screen.dart';
-import 'my_music_screen.dart';
-import 'liked_content_screen.dart';
-import 'bookmarks_screen.dart';
-import 'friends_screen.dart';
+import '../../../../auth/presentation/widgets/login_modal.dart';
+import '../../../../auth/presentation/widgets/backend_test_modal.dart';
+import '../modals/profile_edit_modal.dart';
+import '../modals/social_follow_modal.dart';
+import '../screens/profile_settings_screen.dart';
+import '../screens/my_music_screen.dart';
+import '../screens/liked_content_screen.dart';
+import '../screens/bookmarks_screen.dart';
+import '../screens/friends_screen.dart';
 import 'dart:typed_data'; // 웹 환경을 위해 Uint8List 사용
 
 class ProfileTab extends StatefulWidget {
@@ -23,12 +23,6 @@ class ProfileTab extends StatefulWidget {
 class _ProfileTabState extends State<ProfileTab> {
   // 프로필 이미지는 AuthStateManager에서 관리
   
-  // 프로필 데이터 상태 변수들 추가
-  String _userName = 'JamMaster';
-  String _userNickname = 'jammaster';
-  String _userBio = '재즈와 팝을 사랑하는 음악인입니다 🎵';
-  String _userInstruments = '기타, 피아노';
-
   @override
   void initState() {
     super.initState();
@@ -47,7 +41,6 @@ class _ProfileTabState extends State<ProfileTab> {
   void _onAuthStateChanged() {
     if (mounted) {
       setState(() {
-        print('🔍 프로필 탭 UI 업데이트 - isLoggedIn: ${AuthStateManager.instance.isLoggedIn}');
       });
     }
   }
@@ -60,7 +53,6 @@ class _ProfileTabState extends State<ProfileTab> {
       builder: (context) => LoginModal(
         onLoginSuccess: (success) async {
           if (success) {
-            print('🔍 로그인 성공 콜백 호출됨');
             
             // AuthStateManager가 이미 상태 변화를 알렸으므로 추가 작업 불필요
             if (!mounted) return;
@@ -111,37 +103,25 @@ class _ProfileTabState extends State<ProfileTab> {
         initialBio: AuthStateManager.instance.userBio,
         initialInstruments: AuthStateManager.instance.userInstruments,
         onImageChanged: (Uint8List? imageBytes, String? imageName) async {
-          print('프로필 탭에서 이미지 변경됨: $imageName'); // 디버깅
           
           if (imageBytes != null) {
             try {
               // ProfileImageManager를 통해 이미지 저장
               await ProfileImageManager.instance.saveProfileImage(imageBytes);
-              print('ProfileImageManager 저장 완료'); // 디버깅
               
               // AuthStateManager를 통해 이미지 업데이트
               await AuthStateManager.instance.updateProfileImage(imageBytes, imageName);
-              print('AuthStateManager 업데이트 완료'); // 디버깅
               
               setState(() {
                 // UI 업데이트
               });
               
-              print('프로필 이미지 상태 업데이트됨: $imageName'); // 디버깅
-            } catch (e) {
-              print('❌ 프로필 이미지 저장 실패: $e');
+            } catch (e) { // ignore: empty_catches
             }
           }
         },
         onProfileSaved: (String name, String nickname, String bio, String instruments) async {
-          print('프로필 데이터 저장됨: $name, $nickname, $bio, $instruments'); // 디버깅
-          setState(() {
-            _userName = name;
-            _userNickname = nickname;
-            _userBio = bio;
-            _userInstruments = instruments;
-          });
-          
+
           // AuthStateManager에 프로필 데이터 저장
           await AuthStateManager.instance.saveProfileData(
             name: name,
@@ -150,7 +130,6 @@ class _ProfileTabState extends State<ProfileTab> {
             instruments: instruments,
           );
           
-          print('프로필 탭에서 데이터 업데이트됨'); // 디버깅
         },
       ),
     );
@@ -263,10 +242,13 @@ class _ProfileTabState extends State<ProfileTab> {
           CircleAvatar(
             radius: 50,
             backgroundColor: AppTheme.accentPink,
-            backgroundImage: AuthStateManager.instance.profileImageBytes != null 
-                ? MemoryImage(AuthStateManager.instance.profileImageBytes!) 
-                : null,
-            child: AuthStateManager.instance.profileImageBytes == null
+            backgroundImage: AuthStateManager.instance.profileImageBytes != null
+                ? MemoryImage(AuthStateManager.instance.profileImageBytes!)
+                : (AuthStateManager.instance.avatarUrl != null
+                    ? NetworkImage(AuthStateManager.instance.avatarUrl!) as ImageProvider
+                    : null),
+            child: (AuthStateManager.instance.profileImageBytes == null &&
+                    AuthStateManager.instance.avatarUrl == null)
                 ? const Icon(Icons.person, color: AppTheme.white, size: 60)
                 : null,
           ),

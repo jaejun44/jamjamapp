@@ -15,7 +15,7 @@ class LiveStreamingScreen extends StatefulWidget {
 }
 
 class _LiveStreamingScreenState extends State<LiveStreamingScreen> {
-  final bool _isLive = true;
+  // _isLive removed (unused field)
   bool _isFollowing = false;
   bool _isLiked = false;
   int _viewerCount = 0;

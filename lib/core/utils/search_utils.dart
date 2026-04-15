@@ -1,4 +1,3 @@
-import 'dart:collection';
 import 'dart:math';
 
 /// 고급 검색 알고리즘과 성능 최적화를 위한 유틸리티 클래스
@@ -159,7 +158,7 @@ class SearchUtils {
   static List<String> generateSearchSuggestions(String partialQuery, List<Map<String, dynamic>> musicians) {
     if (partialQuery.isEmpty) return [];
     
-    Set<String> suggestions = LinkedHashSet<String>();
+    Set<String> suggestions = <String>{};
     String queryLower = partialQuery.toLowerCase();
     
     // 이름에서 제안

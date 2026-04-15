@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
 import 'package:jamjamapp/core/services/supabase_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:jamjamapp/core/services/auth_state_manager.dart';
 
 class SignupModal extends StatefulWidget {
   final Function(bool) onSignupSuccess;
@@ -42,56 +42,52 @@ class _SignupModalState extends State<SignupModal> {
       _isLoading = true;
     });
 
-    print('🎯 회원가입 시작...');
 
     try {
-      print('📧 이메일: ${_emailController.text.trim()}');
-      print('👤 닉네임: ${_nicknameController.text.trim()}');
-      
-      // Supabase 회원가입
-      print('🔄 Supabase 회원가입 시도...');
-      final response = await SupabaseService.instance.signUpWithEmail(
+
+      // Supabase 회원가입 + profiles 행 생성 (단일 호출)
+      final response = await SupabaseService.instance.signUpWithProfile(
         email: _emailController.text.trim(),
         password: _passwordController.text,
-        userData: {
-          'nickname': _nicknameController.text.trim(),
-        },
+        nickname: _nicknameController.text.trim(),
       );
 
-      print('✅ Supabase 회원가입 성공: ${response.user?.id}');
-
       if (response.user != null) {
-        // 프로필 정보 업데이트
-        print('🔄 프로필 정보 업데이트 시도...');
-        await SupabaseService.instance.updateUserProfile(
-          userId: response.user!.id,
-          profileData: {
-            'nickname': _nicknameController.text.trim(),
-            'bio': '새로운 음악인입니다 🎵',
-            'instruments': ['기타', '피아노'],
-          },
-        );
+        // 이메일 인증 필요 여부 확인 (세션 유무로 판단)
+        final hasSession = response.session != null;
 
-        print('✅ 프로필 정보 업데이트 성공');
-
-        // 회원가입 성공 시 자동 로그인 상태 저장
-        print('🔄 자동 로그인 데이터 저장...');
-        await _saveAutoLoginData();
-
-        print('✅ 회원가입 완료!');
-
-        if (mounted) {
-          Navigator.of(context).pop(true);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('회원가입이 완료되었습니다! 자동으로 로그인되었습니다.'),
-              backgroundColor: AppTheme.accentPink,
-            ),
+        if (hasSession) {
+          await AuthStateManager.instance.updateLoginState(
+            userId: response.user!.id,
+            email: response.user!.email ?? '',
+            nickname: _nicknameController.text.trim(),
           );
+
+          if (mounted) {
+            Navigator.of(context).pop(true);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('회원가입이 완료되었습니다! 자동으로 로그인되었습니다.'),
+                backgroundColor: AppTheme.accentPink,
+              ),
+            );
+          }
+        } else {
+          // 이메일 인증 필요한 경우
+          if (mounted) {
+            Navigator.of(context).pop();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('이메일로 인증 링크가 발송되었습니다. 확인 후 로그인해주세요.'),
+                backgroundColor: AppTheme.accentPink,
+                duration: Duration(seconds: 5),
+              ),
+            );
+          }
         }
+
       }
     } catch (e) {
-      print('❌ 회원가입 실패: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -106,33 +102,6 @@ class _SignupModalState extends State<SignupModal> {
           _isLoading = false;
         });
       }
-    }
-  }
-
-  // 자동 로그인 데이터 저장
-  Future<void> _saveAutoLoginData() async {
-    final prefs = await SharedPreferences.getInstance();
-    final user = SupabaseService.instance.currentUser;
-
-    if (user != null) {
-      // 로그인 상태 저장
-      await prefs.setBool('isLoggedIn', true);
-      await prefs.setString('userId', user.id);
-
-      // 사용자 정보 저장
-      final email = user.email ?? '';
-      final userName = _nicknameController.text.trim();
-
-      await prefs.setString('userName', userName);
-      await prefs.setString('userNickname', userName);
-      await prefs.setString('userEmail', email);
-      await prefs.setString('userBio', '새로운 음악인입니다 🎵');
-      await prefs.setString('userInstruments', '기타, 피아노');
-
-      // 로그인 시간 저장
-      await prefs.setString('loginTime', DateTime.now().toIso8601String());
-
-      print('자동 로그인 데이터 저장됨: 사용자=$userName');
     }
   }
 

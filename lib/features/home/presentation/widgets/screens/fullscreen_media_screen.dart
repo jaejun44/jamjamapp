@@ -60,8 +60,7 @@ class _FullscreenMediaScreenState extends State<FullscreenMediaScreen> {
           _isInitialized = true;
         });
       }
-    } catch (e) {
-      print('풀스크린 미디어 플레이어 초기화 오류: $e');
+    } catch (e) { // ignore: empty_catches
     }
   }
 

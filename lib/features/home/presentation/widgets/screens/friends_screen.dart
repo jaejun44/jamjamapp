@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
-import '../../../chat/presentation/screens/chat_room_screen.dart';
+import 'package:jamjamapp/core/services/follow_service.dart';
+import 'package:jamjamapp/core/services/supabase_service.dart';
+import 'package:jamjamapp/core/services/connect_service.dart';
+import '../../../../chat/presentation/screens/chat_room_screen.dart';
 import 'user_profile_screen.dart';
+import 'connect_screen.dart';
 
 class FriendsScreen extends StatefulWidget {
   const FriendsScreen({super.key});
@@ -14,7 +18,7 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
   late TabController _tabController;
   List<Map<String, dynamic>> _friends = [];
   List<Map<String, dynamic>> _friendRequests = [];
-  List<Map<String, dynamic>> _suggestedFriends = [];
+  List<Map<String, dynamic>> _matches = [];
   bool _isLoading = true;
 
   @override
@@ -31,57 +35,27 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
   }
 
   Future<void> _loadFriends() async {
-    // 시뮬레이션된 로딩
-    await Future.delayed(const Duration(milliseconds: 500));
-    
-    setState(() {
-      _friends = [
-        {
-          'id': '1',
-          'name': 'JazzMaster',
-          'nickname': '@jazzmaster',
-          'bio': '재즈 피아니스트입니다. 밤의 재즈를 사랑해요.',
-          'avatar': null,
-          'isOnline': true,
-          'lastSeen': '방금 전',
-          'mutualFriends': 5,
-          'genre': '재즈',
-        },
-        {
-          'id': '2',
-          'name': 'RockStar',
-          'nickname': '@rockstar',
-          'bio': '락 기타리스트입니다. 하드락을 연주해요.',
-          'avatar': null,
-          'isOnline': false,
-          'lastSeen': '1시간 전',
-          'mutualFriends': 3,
-          'genre': '락',
-        },
-        {
-          'id': '3',
-          'name': 'PianoVirtuoso',
-          'nickname': '@pianovirtuoso',
-          'bio': '클래식 피아니스트입니다. 베토벤을 좋아해요.',
-          'avatar': null,
-          'isOnline': true,
-          'lastSeen': '방금 전',
-          'mutualFriends': 8,
-          'genre': '클래식',
-        },
-        {
-          'id': '4',
-          'name': 'SynthWave',
-          'nickname': '@synthwave',
-          'bio': '일렉트로닉 음악을 만듭니다. 신스웨이브를 좋아해요.',
-          'avatar': null,
-          'isOnline': false,
-          'lastSeen': '30분 전',
-          'mutualFriends': 2,
-          'genre': '일렉트로닉',
-        },
-      ];
+    final myId = SupabaseService.instance.currentUser?.id;
+    if (myId != null) {
+      final following = await FollowService.instance.getFollowing(myId);
+      if (mounted) {
+        setState(() {
+          _friends = following.map((f) => {
+            'id': f['userId'] as String,
+            'name': f['nickname'] as String,
+            'nickname': '@${f['username']}',
+            'bio': '',
+            'avatar': f['avatarUrl'] as String?,
+            'isOnline': false,
+            'lastSeen': '',
+            'mutualFriends': 0,
+            'genre': '',
+          }).toList();
+        });
+      }
+    }
 
+    setState(() {
       _friendRequests = [
         {
           'id': '1',
@@ -105,41 +79,14 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
         },
       ];
 
-      _suggestedFriends = [
-        {
-          'id': '1',
-          'name': 'ViolinVirtuoso',
-          'nickname': '@violinvirtuoso',
-          'bio': '바이올리니스트입니다. 클래식과 재즈를 연주해요.',
-          'avatar': null,
-          'mutualFriends': 3,
-          'genre': '클래식',
-          'similarity': 85,
-        },
-        {
-          'id': '2',
-          'name': 'BassPlayer',
-          'nickname': '@bassplayer',
-          'bio': '베이시스트입니다. 재즈와 팝을 연주해요.',
-          'avatar': null,
-          'mutualFriends': 2,
-          'genre': '재즈',
-          'similarity': 78,
-        },
-        {
-          'id': '3',
-          'name': 'SaxophoneKing',
-          'nickname': '@saxophoneking',
-          'bio': '색소폰 연주자입니다. 재즈와 블루스를 사랑해요.',
-          'avatar': null,
-          'mutualFriends': 5,
-          'genre': '재즈',
-          'similarity': 92,
-        },
-      ];
-
       _isLoading = false;
     });
+
+    // 매칭 목록 로드
+    final matches = await ConnectService.instance.getMatches();
+    if (mounted) {
+      setState(() => _matches = matches);
+    }
   }
 
   @override
@@ -163,7 +110,7 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
           tabs: const [
             Tab(text: '친구'),
             Tab(text: '요청'),
-            Tab(text: '추천'),
+            Tab(text: '매칭'),
           ],
         ),
       ),
@@ -174,7 +121,7 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
               children: [
                 _buildFriendsTab(),
                 _buildRequestsTab(),
-                _buildSuggestionsTab(),
+                _buildMatchesTab(),
               ],
             ),
     );
@@ -478,115 +425,112 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
     );
   }
 
-  Widget _buildSuggestionsTab() {
-    if (_suggestedFriends.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.people_outline, size: 64, color: AppTheme.grey),
-            SizedBox(height: 16),
-            Text(
-              '추천 친구가 없습니다',
-              style: TextStyle(color: AppTheme.grey, fontSize: 18),
+  Widget _buildMatchesTab() {
+    return Column(
+      children: [
+        // Connect(스와이프) 진입 버튼
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: ElevatedButton.icon(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const ConnectScreen()),
             ),
-            SizedBox(height: 8),
-            Text(
-              '나중에 다시 확인해보세요!',
-              style: TextStyle(color: AppTheme.grey),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _suggestedFriends.length,
-      itemBuilder: (context, index) {
-        final suggestion = _suggestedFriends[index];
-        return _buildSuggestionCard(suggestion);
-      },
-    );
-  }
-
-  Widget _buildSuggestionCard(Map<String, dynamic> suggestion) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 30,
+            icon: const Icon(Icons.favorite, color: AppTheme.white),
+            label: const Text('새 뮤지션 찾기',
+                style: TextStyle(color: AppTheme.white)),
+            style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.accentPink,
-              child: Text(
-                suggestion['name'][0].toUpperCase(),
-                style: const TextStyle(color: AppTheme.white, fontWeight: FontWeight.bold),
+              minimumSize: const Size.fromHeight(48),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
               ),
             ),
-            const SizedBox(width: 16),
-            Expanded(
+          ),
+        ),
+        // 매칭 목록
+        if (_matches.isEmpty)
+          const Expanded(
+            child: Center(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Row(
-                    children: [
-                      Text(
-                        suggestion['name'],
-                        style: const TextStyle(color: AppTheme.white, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppTheme.accentPink,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          suggestion['genre'],
-                          style: const TextStyle(color: AppTheme.white, fontSize: 10),
-                        ),
-                      ),
-                    ],
-                  ),
+                  Icon(Icons.favorite_border, size: 64, color: AppTheme.grey),
+                  SizedBox(height: 16),
                   Text(
-                    suggestion['nickname'],
-                    style: const TextStyle(color: AppTheme.grey),
+                    '아직 매칭된 뮤지션이 없습니다',
+                    style: TextStyle(color: AppTheme.grey, fontSize: 16),
                   ),
-                  const SizedBox(height: 4),
+                  SizedBox(height: 8),
                   Text(
-                    suggestion['bio'],
-                    style: const TextStyle(color: AppTheme.white),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Text(
-                        '공통 친구 ${suggestion['mutualFriends']}명',
-                        style: const TextStyle(color: AppTheme.grey, fontSize: 12),
-                      ),
-                      const SizedBox(width: 16),
-                      Text(
-                        '유사도 ${suggestion['similarity']}%',
-                        style: const TextStyle(color: AppTheme.accentPink, fontSize: 12),
-                      ),
-                    ],
+                    '위 버튼으로 뮤지션을 찾아보세요!',
+                    style: TextStyle(color: AppTheme.grey),
                   ),
                 ],
               ),
             ),
-            ElevatedButton(
-              onPressed: () => _sendFriendRequest(suggestion),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.accentPink,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              ),
-              child: const Text('친구 요청'),
+          )
+        else
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: _matches.length,
+              itemBuilder: (context, index) =>
+                  _buildMatchCard(_matches[index]),
             ),
-          ],
+          ),
+      ],
+    );
+  }
+
+  Widget _buildMatchCard(Map<String, dynamic> match) {
+    final nickname = match['nickname'] as String? ?? 'Unknown';
+    final username = match['username'] as String? ?? '';
+    final avatarUrl = match['avatarUrl'] as String?;
+
+    return Card(
+      color: AppTheme.secondaryBlack,
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ListTile(
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        leading: CircleAvatar(
+          radius: 28,
+          backgroundColor: AppTheme.accentPink.withValues(alpha: 0.3),
+          backgroundImage:
+              avatarUrl != null ? NetworkImage(avatarUrl) : null,
+          child: avatarUrl == null
+              ? Text(
+                  nickname.isNotEmpty ? nickname[0].toUpperCase() : '?',
+                  style: const TextStyle(
+                      color: AppTheme.white, fontWeight: FontWeight.bold),
+                )
+              : null,
+        ),
+        title: Text(nickname,
+            style: const TextStyle(
+                color: AppTheme.white, fontWeight: FontWeight.bold)),
+        subtitle: username.isNotEmpty
+            ? Text('@$username',
+                style: const TextStyle(color: AppTheme.grey))
+            : null,
+        trailing: ElevatedButton(
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => ChatRoomScreen(
+                userName: nickname,
+                userAvatar: avatarUrl ?? '👤',
+              ),
+            ),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.accentPink,
+            padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8)),
+          ),
+          child: const Text('채팅', style: TextStyle(color: AppTheme.white)),
         ),
       ),
     );
@@ -625,6 +569,7 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
         builder: (context) => UserProfileScreen(
           username: friend['name'],
           userAvatar: friend['avatar'] ?? '👤',
+          userId: friend['id'] as String?,
         ),
       ),
     );
@@ -646,7 +591,12 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
             child: const Text('취소', style: TextStyle(color: AppTheme.grey)),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
+              final userId = friend['id'] as String?;
+              if (userId != null) {
+                await FollowService.instance.unfollow(userId);
+              }
+              if (!context.mounted) return;
               setState(() {
                 _friends.removeWhere((item) => item['id'] == friend['id']);
               });
@@ -695,14 +645,6 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
     );
   }
 
-  void _sendFriendRequest(Map<String, dynamic> suggestion) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${suggestion['name']}에게 친구 요청을 보냅니다'),
-        backgroundColor: AppTheme.accentPink,
-      ),
-    );
-  }
 
   void _showSearchDialog() {
     showDialog(

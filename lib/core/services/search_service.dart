@@ -224,7 +224,7 @@ class SearchService {
       return LinkedHashSet<String>.from(favorites);
     } catch (e) {
       _setError('즐겨찾기 로드 중 오류가 발생했습니다: $e');
-      return LinkedHashSet<String>();
+      return <String>{};
     }
   }
 

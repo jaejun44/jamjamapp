@@ -37,7 +37,6 @@ class _ProfileEditModalState extends State<ProfileEditModal> {
   bool _isSaving = false;
   bool _isImageUploading = false;
   Uint8List? _profileImageBytes; // 프로필 이미지 바이트 데이터
-  String? _profileImageName; // 이미지 파일명
   final ImagePicker _picker = ImagePicker();
 
   @override
@@ -82,7 +81,6 @@ class _ProfileEditModalState extends State<ProfileEditModal> {
       final String bio = _bioController.text.trim();
       final String instruments = _instrumentController.text.trim();
       
-      print('프로필 저장 콜백 호출: $name, $nickname, $bio, $instruments'); // 디버깅
       widget.onProfileSaved!(name, nickname, bio, instruments);
     }
 
@@ -99,6 +97,7 @@ class _ProfileEditModalState extends State<ProfileEditModal> {
     setState(() {
       _isImageUploading = true;
     });
+    final messenger = ScaffoldMessenger.of(context);
 
     try {
       // 실제 이미지 선택
@@ -114,21 +113,18 @@ class _ProfileEditModalState extends State<ProfileEditModal> {
         final Uint8List imageBytes = await image.readAsBytes();
         final String imageName = image.name;
         
-        print('이미지 선택됨: $imageName'); // 디버깅
         
         setState(() {
           _profileImageBytes = imageBytes;
-          _profileImageName = imageName;
           _isImageUploading = false;
         });
         
         // 부모 위젯에 이미지 변경 알림
         if (widget.onImageChanged != null) {
-          print('콜백 호출: $imageName'); // 디버깅
           widget.onImageChanged!(imageBytes, imageName);
         }
         
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           const SnackBar(
             content: Text('프로필 이미지가 업로드되었습니다!'),
             backgroundColor: AppTheme.accentPink,
@@ -140,13 +136,12 @@ class _ProfileEditModalState extends State<ProfileEditModal> {
         });
       }
     } catch (e) {
-      print('이미지 업로드 오류: $e'); // 디버깅
       if (mounted) {
         setState(() {
           _isImageUploading = false;
         });
-        
-        ScaffoldMessenger.of(context).showSnackBar(
+
+        messenger.showSnackBar(
           SnackBar(
             content: Text('이미지 업로드 실패: $e'),
             backgroundColor: Colors.red,

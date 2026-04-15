@@ -538,4 +538,259 @@ class SupabaseService {
   Future<void> unsubscribeFromChannel(RealtimeChannel channel) async {
     await _client.removeChannel(channel);
   }
+
+  // ---------------------------------------------------------------------------
+  // B-1 Follow (Watch)
+  // ---------------------------------------------------------------------------
+
+  /// 팔로우 여부 확인
+  Future<bool> isFollowing(String followerId, String followingId) async {
+    final row = await _client
+        .from('follows')
+        .select('follower_id')
+        .eq('follower_id', followerId)
+        .eq('following_id', followingId)
+        .maybeSingle();
+    return row != null;
+  }
+
+  /// 팔로우
+  Future<void> follow(String followingId) async {
+    final myId = currentUser?.id;
+    if (myId == null) return;
+    await _client.from('follows').insert({
+      'follower_id': myId,
+      'following_id': followingId,
+    });
+  }
+
+  /// 언팔로우
+  Future<void> unfollow(String followingId) async {
+    final myId = currentUser?.id;
+    if (myId == null) return;
+    await _client
+        .from('follows')
+        .delete()
+        .eq('follower_id', myId)
+        .eq('following_id', followingId);
+  }
+
+  /// 내가 팔로우하는 사람 목록 (profiles join)
+  Future<List<Map<String, dynamic>>> getFollowing(String userId) async {
+    final response = await _client
+        .from('follows')
+        .select('following_id, profiles:following_id(id, username, nickname, avatar_url)')
+        .eq('follower_id', userId);
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  /// 나를 팔로우하는 사람 목록 (profiles join)
+  Future<List<Map<String, dynamic>>> getFollowers(String userId) async {
+    final response = await _client
+        .from('follows')
+        .select('follower_id, profiles:follower_id(id, username, nickname, avatar_url)')
+        .eq('following_id', userId);
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  /// 팔로잉 수
+  Future<int> getFollowingCount(String userId) async {
+    final response = await _client
+        .from('follows')
+        .select('follower_id')
+        .eq('follower_id', userId);
+    return (response as List).length;
+  }
+
+  /// 팔로워 수
+  Future<int> getFollowerCount(String userId) async {
+    final response = await _client
+        .from('follows')
+        .select('following_id')
+        .eq('following_id', userId);
+    return (response as List).length;
+  }
+
+  // ---------------------------------------------------------------------------
+  // B-2 Connect (Match)
+  // ---------------------------------------------------------------------------
+
+  /// 상대방에게 좋아요 (이미 있으면 무시)
+  Future<void> likeUser(String toId) async {
+    final myId = currentUser?.id;
+    if (myId == null) return;
+    await _client.from('connect_likes').upsert({
+      'from_id': myId,
+      'to_id': toId,
+    });
+  }
+
+  /// 좋아요 취소
+  Future<void> unlikeUser(String toId) async {
+    final myId = currentUser?.id;
+    if (myId == null) return;
+    await _client
+        .from('connect_likes')
+        .delete()
+        .eq('from_id', myId)
+        .eq('to_id', toId);
+  }
+
+  /// 내가 특정 유저에게 좋아요를 눌렀는지 확인
+  Future<bool> hasLiked(String fromId, String toId) async {
+    final row = await _client
+        .from('connect_likes')
+        .select('from_id')
+        .eq('from_id', fromId)
+        .eq('to_id', toId)
+        .maybeSingle();
+    return row != null;
+  }
+
+  /// 서로 좋아요 여부 확인 (매칭 조건)
+  Future<bool> checkMutualLike(String userId1, String userId2) async {
+    final a = await hasLiked(userId1, userId2);
+    if (!a) return false;
+    return hasLiked(userId2, userId1);
+  }
+
+  /// 매치 생성 (user1 < user2 UUID 순 정렬 필수)
+  Future<Map<String, dynamic>?> createMatch(
+      String userId1, String userId2) async {
+    // DB constraint: user1_id < user2_id
+    final sorted = [userId1, userId2]..sort();
+    try {
+      final response = await _client
+          .from('matches')
+          .upsert({
+            'user1_id': sorted[0],
+            'user2_id': sorted[1],
+          })
+          .select()
+          .single();
+      return Map<String, dynamic>.from(response);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 내 매치 목록 (profiles join)
+  Future<List<Map<String, dynamic>>> getMatches(String userId) async {
+    final response = await _client
+        .from('matches')
+        .select(
+          'id, created_at, '
+          'user1:user1_id(id, username, nickname, avatar_url), '
+          'user2:user2_id(id, username, nickname, avatar_url)',
+        )
+        .or('user1_id.eq.$userId,user2_id.eq.$userId')
+        .order('created_at', ascending: false);
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  /// 아직 스와이프하지 않은 추천 유저 목록 (팔로잉 제외, 나 제외, 이미 좋아요 제외)
+  /// 간단 구현: profiles 전체 fetch 후 로컬 필터
+  Future<List<Map<String, dynamic>>> getCandidates() async {
+    final myId = currentUser?.id;
+    if (myId == null) return [];
+
+    // 내가 이미 좋아요 누른 유저 ID 수집
+    final likedRows = await _client
+        .from('connect_likes')
+        .select('to_id')
+        .eq('from_id', myId);
+    final likedIds = (likedRows as List)
+        .map((r) => r['to_id'] as String)
+        .toSet();
+
+    // 프로필 전체 (간단 구현, 대규모 시 서버 필터 필요)
+    final profiles = await _client
+        .from('profiles')
+        .select('id, username, nickname, avatar_url')
+        .neq('id', myId);
+
+    return (profiles as List)
+        .cast<Map<String, dynamic>>()
+        .where((p) => !likedIds.contains(p['id'] as String?))
+        .toList();
+  }
+
+  // ---------------------------------------------------------------------------
+  // B-3 Notifications
+  // ---------------------------------------------------------------------------
+
+  /// 내 알림 목록 (최신순)
+  Future<List<Map<String, dynamic>>> getNotifications({
+    int limit = 30,
+    bool unreadOnly = false,
+  }) async {
+    final myId = currentUser?.id;
+    if (myId == null) return [];
+    var query = _client
+        .from('notifications')
+        .select('id, type, payload, read, created_at')
+        .eq('user_id', myId);
+    if (unreadOnly) {
+      query = query.eq('read', false);
+    }
+    final response = await query
+        .order('created_at', ascending: false)
+        .limit(limit);
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  /// 읽지 않은 알림 수
+  Future<int> getUnreadNotificationCount() async {
+    final myId = currentUser?.id;
+    if (myId == null) return 0;
+    final response = await _client
+        .from('notifications')
+        .select('id')
+        .eq('user_id', myId)
+        .eq('read', false);
+    return (response as List).length;
+  }
+
+  /// 특정 알림 읽음 처리
+  Future<void> markNotificationRead(String notificationId) async {
+    await _client
+        .from('notifications')
+        .update({'read': true})
+        .eq('id', notificationId);
+  }
+
+  /// 내 알림 전체 읽음 처리
+  Future<void> markAllNotificationsRead() async {
+    final myId = currentUser?.id;
+    if (myId == null) return;
+    await _client
+        .from('notifications')
+        .update({'read': true})
+        .eq('user_id', myId)
+        .eq('read', false);
+  }
+
+  /// 알림 실시간 구독
+  RealtimeChannel subscribeToNotifications(
+    void Function(Map<String, dynamic> payload) onInsert,
+  ) {
+    final myId = currentUser?.id;
+    final channel = _client.channel('notifications_${myId ?? 'anon'}');
+    channel
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'notifications',
+          filter: myId != null
+              ? PostgresChangeFilter(
+                  type: PostgresChangeFilterType.eq,
+                  column: 'user_id',
+                  value: myId,
+                )
+              : null,
+          callback: (payload) => onInsert(payload.newRecord),
+        )
+        .subscribe();
+    return channel;
+  }
 } 

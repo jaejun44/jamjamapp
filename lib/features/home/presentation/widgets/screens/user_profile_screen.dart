@@ -1,16 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
-import '../../../chat/presentation/screens/chat_room_screen.dart';
+import '../../../../chat/presentation/screens/chat_room_screen.dart';
 import 'package:jamjamapp/core/services/auth_state_manager.dart';
+import 'package:jamjamapp/core/services/follow_service.dart';
 
 class UserProfileScreen extends StatefulWidget {
   final String username;
   final String userAvatar;
+  /// Supabase user UUID — 제공 시 실제 팔로우 연동
+  final String? userId;
 
   const UserProfileScreen({
     super.key,
     required this.username,
     this.userAvatar = '👤',
+    this.userId,
   });
 
   @override
@@ -20,6 +24,21 @@ class UserProfileScreen extends StatefulWidget {
 class _UserProfileScreenState extends State<UserProfileScreen> {
   bool _isFollowing = false;
   bool _isBlocked = false;
+  bool _followLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.userId != null) {
+      _loadFollowState();
+    }
+  }
+
+  Future<void> _loadFollowState() async {
+    final following = await FollowService.instance.isFollowing(widget.userId!);
+    if (!mounted) return;
+    setState(() => _isFollowing = following);
+  }
 
   // 사용자 정보 (실제로는 API에서 가져올 데이터)
   Map<String, dynamic> get _userInfo => {
@@ -239,7 +258,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         children: [
           Expanded(
             child: ElevatedButton(
-              onPressed: () => _toggleFollow(),
+              onPressed: _followLoading ? null : _toggleFollow,
               style: ElevatedButton.styleFrom(
                 backgroundColor: _isFollowing ? AppTheme.grey : AppTheme.accentPink,
                 foregroundColor: AppTheme.white,
@@ -248,7 +267,16 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              child: Text(_isFollowing ? '팔로잉' : '팔로우'),
+              child: _followLoading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppTheme.white,
+                      ),
+                    )
+                  : Text(_isFollowing ? '팔로잉' : '팔로우'),
             ),
           ),
           const SizedBox(width: 12),
@@ -307,14 +335,26 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     );
   }
 
-  void _toggleFollow() {
+  Future<void> _toggleFollow() async {
+    if (_followLoading) return;
+    setState(() => _followLoading = true);
+
+    bool nowFollowing;
+    if (widget.userId != null) {
+      nowFollowing = await FollowService.instance.toggleFollow(widget.userId!);
+    } else {
+      nowFollowing = !_isFollowing;
+    }
+
+    if (!mounted) return;
     setState(() {
-      _isFollowing = !_isFollowing;
+      _isFollowing = nowFollowing;
+      _followLoading = false;
     });
-    
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(_isFollowing ? '팔로우했습니다!' : '팔로우를 취소했습니다.'),
+        content: Text(nowFollowing ? '팔로우했습니다!' : '팔로우를 취소했습니다.'),
         backgroundColor: AppTheme.accentPink,
       ),
     );

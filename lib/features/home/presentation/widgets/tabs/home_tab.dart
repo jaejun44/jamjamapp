@@ -1,24 +1,23 @@
-import 'dart:collection';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
 import 'package:jamjamapp/core/services/app_state_manager.dart';
 import 'package:jamjamapp/core/services/auth_state_manager.dart';
 import 'package:jamjamapp/core/services/comment_service.dart';
-import 'package:jamjamapp/core/services/profile_image_manager.dart';
 import 'package:jamjamapp/core/services/counter_service.dart';
-import 'comment_modal.dart';
-import 'file_upload_modal.dart';
-import 'user_profile_screen.dart';
-import 'media_player_widget.dart';
-import 'share_modal.dart';
-import 'feed_edit_modal.dart';
-import 'live_streaming_screen.dart';
-import 'trending_feeds_screen.dart';
-import 'report_modal.dart';
+import 'package:jamjamapp/core/services/feed_service.dart';
+import 'package:jamjamapp/core/services/follow_service.dart';
+import 'package:jamjamapp/core/services/supabase_service.dart';
+import '../modals/comment_modal.dart';
+import '../modals/file_upload_modal.dart';
+import '../screens/user_profile_screen.dart';
+import '../shared/feed_card.dart';
+import '../modals/share_modal.dart';
+import '../modals/feed_edit_modal.dart';
+import '../screens/trending_feeds_screen.dart';
+import '../screens/notifications_screen.dart';
+import 'package:jamjamapp/core/services/notification_service.dart';
 import 'dart:async';
-import 'package:jamjamapp/core/services/recommendation_service.dart';
-import 'package:jamjamapp/core/services/offline_service.dart';
+import 'dart:typed_data';
 
 class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
@@ -35,20 +34,12 @@ class _HomeTabState extends State<HomeTab> {
   final ScrollController _scrollController = ScrollController();
   
   // 페이지네이션
-  int _currentPage = 1;
   bool _hasMoreData = true;
   bool _isLoadingMore = false;
   static const int _itemsPerPage = 10;
   
-  // 새로고침 상태
-  bool _isRefreshing = false;
-  
   // 실시간 업데이트 상태
   Timer? _realtimeUpdateTimer;
-  final DateTime _lastUpdateTime = DateTime.now();
-  
-  final RecommendationService _recommendationService = RecommendationService.instance;
-  final OfflineService _offlineService = OfflineService();
   
   // 필터 옵션
   final List<String> _genres = ['전체', '재즈', '팝', '락', '클래식', '일렉트로닉'];
@@ -73,7 +64,6 @@ class _HomeTabState extends State<HomeTab> {
         });
         return convertedMap;
       } catch (e) {
-        print('⚠️ _likedFeeds 타입 변환 실패: $e');
         return _emptyLikedFeeds;
       }
     }
@@ -93,7 +83,6 @@ class _HomeTabState extends State<HomeTab> {
         });
         return convertedMap;
       } catch (e) {
-        print('⚠️ _savedFeeds 타입 변환 실패: $e');
         return _emptySavedFeeds;
       }
     }
@@ -105,7 +94,6 @@ class _HomeTabState extends State<HomeTab> {
       try {
         return rawData.cast<String>();
       } catch (e) {
-        print('⚠️ _followedUsers 타입 변환 실패: $e');
         return _emptyFollowedUsers;
       }
     }
@@ -143,6 +131,12 @@ class _HomeTabState extends State<HomeTab> {
     await _appStateManager.updateValue('home', 'isOfflineMode', value);
   }
 
+  // 피드 모드: '전체' | '팔로잉'
+  String _feedMode = '전체';
+
+  // 읽지 않은 알림 수
+  int _unreadNotificationCount = 0;
+
   // 사용자가 생성한 실제 피드 데이터만 저장
   final List<Map<String, dynamic>> _allFeedData = [];
 
@@ -155,6 +149,13 @@ class _HomeTabState extends State<HomeTab> {
     _loadInitialData();
     _setupScrollListener();
     _startRealtimeUpdates();
+    _loadUnreadCount();
+  }
+
+  Future<void> _loadUnreadCount() async {
+    final count = await NotificationService.instance.getUnreadCount();
+    if (!mounted) return;
+    setState(() => _unreadNotificationCount = count);
   }
 
   @override
@@ -169,36 +170,122 @@ class _HomeTabState extends State<HomeTab> {
     // AppStateManager에서 저장된 피드 데이터 로드 - 안전한 타입 변환
     final rawFeedData = AppStateManager.instance.getState('home')['feedData'];
     List<Map<String, dynamic>>? savedFeedData;
-    
+
     if (rawFeedData is List) {
       // List<dynamic>을 List<Map<String, dynamic>>로 안전하게 변환
       try {
         savedFeedData = rawFeedData.cast<Map<String, dynamic>>();
-        print('🔄 피드 데이터 타입 변환 성공: ${savedFeedData.length}개');
       } catch (e) {
-        print('❌ 피드 데이터 타입 변환 실패: $e');
         savedFeedData = null;
       }
     }
-    
+
     if (savedFeedData != null && savedFeedData.isNotEmpty) {
       _feedData = savedFeedData;
-      _currentPage = (_feedData.length / _itemsPerPage).ceil();
       _hasMoreData = _allFeedData.length > _feedData.length;
-      print('✅ 저장된 피드 데이터 복원: ${savedFeedData.length}개');
     } else {
       _feedData = _allFeedData.take(_itemsPerPage).toList();
-      _currentPage = 1;
       _hasMoreData = _allFeedData.length > _itemsPerPage;
       // AppStateManager에 저장
       AppStateManager.instance.updateValue('home', 'feedData', _feedData);
     }
-    
+
     // CounterService에서 실제 카운트 동기화
     _syncCountsWithCounterService();
-    
+
     // 사용자 좋아요 상태 복원
     _syncUserLikeStates();
+
+    // Supabase에서 최신 피드 비동기 로드
+    _fetchFeedsFromSupabase();
+  }
+
+  /// Supabase에서 피드 목록 로드 후 상태 업데이트
+  Future<void> _fetchFeedsFromSupabase() async {
+    try {
+      final feeds = await FeedService.instance.fetchFeeds(limit: _itemsPerPage);
+      if (!mounted || feeds.isEmpty) return;
+      for (final feed in feeds) {
+        await CounterService.instance.initializeFeedCounts(
+          feed['id'] as int,
+          likes: feed['likes'] as int? ?? 0,
+          comments: feed['comments'] as int? ?? 0,
+          shares: 0,
+        );
+      }
+      setState(() {
+        _allFeedData
+          ..clear()
+          ..addAll(feeds);
+        _feedData = List<Map<String, dynamic>>.from(feeds);
+        _hasMoreData = feeds.length >= _itemsPerPage;
+      });
+      AppStateManager.instance.updateValue('home', 'feedData', _feedData);
+      _syncCountsWithCounterService();
+      _syncUserLikeStates();
+    } catch (_) {}
+  }
+
+  /// 팔로잉 유저의 피드만 로드
+  Future<void> _fetchFollowingFeeds() async {
+    try {
+      final myId = SupabaseService.instance.currentUser?.id;
+      if (myId == null) return;
+
+      final following = await FollowService.instance.getFollowing(myId);
+      final followingIds = following
+          .map((f) => f['userId'] as String?)
+          .whereType<String>()
+          .toSet();
+
+      if (!mounted) return;
+
+      if (followingIds.isEmpty) {
+        setState(() {
+          _allFeedData.clear();
+          _feedData = [];
+          _hasMoreData = false;
+        });
+        return;
+      }
+
+      final feeds = await FeedService.instance.fetchFeeds(limit: 50);
+      if (!mounted) return;
+
+      final filtered = feeds
+          .where((f) => followingIds.contains(f['authorId'] as String?))
+          .toList();
+
+      for (final feed in filtered) {
+        await CounterService.instance.initializeFeedCounts(
+          feed['id'] as int,
+          likes: feed['likes'] as int? ?? 0,
+          comments: feed['comments'] as int? ?? 0,
+          shares: 0,
+        );
+      }
+
+      setState(() {
+        _allFeedData
+          ..clear()
+          ..addAll(filtered);
+        _feedData = List<Map<String, dynamic>>.from(filtered);
+        _hasMoreData = false;
+      });
+      _syncCountsWithCounterService();
+      _syncUserLikeStates();
+    } catch (_) {}
+  }
+
+  /// 피드 모드 전환
+  void _switchFeedMode(String mode) {
+    if (_feedMode == mode) return;
+    setState(() => _feedMode = mode);
+    if (mode == '팔로잉') {
+      _fetchFollowingFeeds();
+    } else {
+      _fetchFeedsFromSupabase();
+    }
   }
 
   /// CounterService와 카운트 동기화
@@ -232,7 +319,6 @@ class _HomeTabState extends State<HomeTab> {
       feed['shares'] = shareCount;
     }
     
-    print('🔄 CounterService와 피드 카운트 동기화 완료');
   }
   
   /// 사용자 좋아요 상태 복원 - ChatGPT-4o 권장
@@ -249,7 +335,6 @@ class _HomeTabState extends State<HomeTab> {
     // AppStateManager에 저장
     _appStateManager.updateValue('home', 'likedFeeds', likedFeedsMap);
     
-    print('👤 사용자 좋아요 상태 복원 완료: ${likedFeedsMap.length}개');
     
     // 🔄 UI 강제 업데이트
     if (mounted) {
@@ -257,20 +342,6 @@ class _HomeTabState extends State<HomeTab> {
         // AppStateManager의 likedFeeds를 직접 업데이트해서 getter가 새 값을 반환하도록 함
         _appStateManager.updateValue('home', 'likedFeeds', Map<int, bool>.from(likedFeedsMap));
       });
-      print('🔄 UI 상태 강제 업데이트 완료');
-    }
-  }
-
-  /// 모든 피드의 댓글 수 업데이트 (레거시 - 호환성 유지)
-  void _updateAllCommentCounts() {
-    for (final feed in _feedData) {
-      final commentCount = CommentService.instance.getCommentCount(feed['id']);
-      feed['comments'] = commentCount;
-    }
-    
-    for (final feed in _allFeedData) {
-      final commentCount = CommentService.instance.getCommentCount(feed['id']);
-      feed['comments'] = commentCount;
     }
   }
 
@@ -286,61 +357,71 @@ class _HomeTabState extends State<HomeTab> {
   /// 더 많은 데이터 로드
   void _loadMoreData() {
     if (_isLoadingMore || !_hasMoreData) return;
+    setState(() { _isLoadingMore = true; });
 
-    setState(() {
-      _isLoadingMore = true;
-    });
-
-    // 시뮬레이션된 로딩
-    Future.delayed(const Duration(milliseconds: 500), () {
-      if (mounted) {
-        final startIndex = _currentPage * _itemsPerPage;
-        final endIndex = startIndex + _itemsPerPage;
-        
-        if (startIndex < _allFeedData.length) {
-          final newItems = _allFeedData.skip(startIndex).take(_itemsPerPage).toList();
-          setState(() {
-            _feedData.addAll(newItems);
-            _currentPage++;
-            _hasMoreData = endIndex < _allFeedData.length;
-            _isLoadingMore = false;
-          });
-          
-          // AppStateManager에 저장
-          AppStateManager.instance.updateValue('home', 'feedData', _feedData);
-        } else {
-          setState(() {
-            _hasMoreData = false;
-            _isLoadingMore = false;
-          });
-        }
+    FeedService.instance.fetchFeeds(
+      limit: _itemsPerPage,
+      offset: _feedData.length,
+    ).then((newItems) {
+      if (!mounted) return;
+      if (newItems.isEmpty) {
+        setState(() { _hasMoreData = false; _isLoadingMore = false; });
+        return;
       }
+      for (final feed in newItems) {
+        CounterService.instance.initializeFeedCounts(
+          feed['id'] as int,
+          likes: feed['likes'] as int? ?? 0,
+          comments: feed['comments'] as int? ?? 0,
+          shares: 0,
+        );
+      }
+      setState(() {
+        _feedData.addAll(newItems);
+        _allFeedData.addAll(newItems);
+        _hasMoreData = newItems.length >= _itemsPerPage;
+        _isLoadingMore = false;
+      });
+      AppStateManager.instance.updateValue('home', 'feedData', _feedData);
+    }).catchError((_) {
+      if (!mounted) return;
+      setState(() { _isLoadingMore = false; });
     });
   }
 
   /// 피드 새로고침
   Future<void> _refreshFeeds() async {
-    setState(() {
-      _isRefreshing = true;
-    });
-
-    // 시뮬레이션된 새로고침
-    await Future.delayed(const Duration(seconds: 2));
-    
-    if (mounted) {
+    try {
+      final feeds = await FeedService.instance.fetchFeeds(limit: _itemsPerPage);
+      if (!mounted) return;
+      for (final feed in feeds) {
+        await CounterService.instance.initializeFeedCounts(
+          feed['id'] as int,
+          likes: feed['likes'] as int? ?? 0,
+          comments: feed['comments'] as int? ?? 0,
+          shares: 0,
+        );
+      }
       setState(() {
-        _isRefreshing = false;
-        _loadInitialData();
+        _allFeedData
+          ..clear()
+          ..addAll(feeds);
+        _feedData = List<Map<String, dynamic>>.from(feeds);
+        _hasMoreData = feeds.length >= _itemsPerPage;
       });
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('새로운 피드가 로드되었습니다!'),
-          backgroundColor: AppTheme.accentPink,
-          duration: Duration(seconds: 2),
-        ),
-      );
-    }
+      AppStateManager.instance.updateValue('home', 'feedData', _feedData);
+      _syncCountsWithCounterService();
+      _syncUserLikeStates();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('새로운 피드가 로드되었습니다!'),
+            backgroundColor: AppTheme.accentPink,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (_) {}
   }
 
   /// 피드 필터링
@@ -370,7 +451,6 @@ class _HomeTabState extends State<HomeTab> {
 
     setState(() {
       _feedData = filtered.take(_itemsPerPage).toList();
-      _currentPage = 1;
       _hasMoreData = filtered.length > _itemsPerPage;
     });
   }
@@ -454,11 +534,12 @@ class _HomeTabState extends State<HomeTab> {
             width: double.infinity,
             child: ElevatedButton(
                               onPressed: () async {
+                  final navigator = Navigator.of(context);
                   await _updateSelectedGenre('전체');
                   await _updateSelectedMediaType('전체');
                   await _updateSearchQuery('');
                   _filterFeeds();
-                  Navigator.of(context).pop();
+                  navigator.pop();
                 },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.accentPink,
@@ -481,75 +562,6 @@ class _HomeTabState extends State<HomeTab> {
     //     _checkForNewFeeds();
     //   }
     // });
-    print('🔄 실시간 업데이트: 더미 피드 생성 비활성화됨');
-  }
-
-  /// 새 피드 확인 (비활성화)
-  void _checkForNewFeeds() {
-    // 더미 피드 생성 비활성화
-    // 실제 백엔드에서 새 피드를 가져오는 로직으로 대체 예정
-    print('🔄 새 피드 확인: 더미 피드 생성 비활성화됨');
-  }
-
-  /// 시뮬레이션된 새 피드 추가 (비활성화)
-  void _addSimulatedNewFeed() {
-    // 더미 피드 생성 완전 비활성화
-    print('🚫 더미 피드 생성 비활성화: 실제 사용자 피드만 표시');
-    return;
-
-    // 아래 코드는 실제 백엔드 연동 시 제거 예정
-    /*
-    final newFeed = {
-      'id': DateTime.now().millisecondsSinceEpoch,
-      'author': 'NewArtist${DateTime.now().second}',
-      'authorAvatar': '🎵',
-      'title': '새로운 음악 ${DateTime.now().second}',
-      'content': '방금 전에 업로드된 새로운 음악입니다! 🎵 #새음악 #실시간',
-      'genre': '팝',
-      'likes': 0,
-      'comments': 0,
-      'shares': 0,
-      'timestamp': '방금 전',
-      'mediaType': 'audio',
-      'tags': ['새음악', '실시간', '팝'],
-    };
-
-    setState(() {
-      _allFeedData.insert(0, newFeed);
-      if (_feedData.isNotEmpty) {
-        _feedData.insert(0, newFeed);
-      }
-    });
-    */
-
-    // 새 피드 알림
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.new_releases, color: AppTheme.white),
-              const SizedBox(width: 8),
-              const Text('새로운 피드가 추가되었습니다!'),
-            ],
-          ),
-          backgroundColor: AppTheme.accentPink,
-          duration: const Duration(seconds: 3),
-          action: SnackBarAction(
-            label: '보기',
-            textColor: AppTheme.white,
-            onPressed: () {
-              // 스크롤을 맨 위로 이동
-              _scrollController.animateTo(
-                0,
-                duration: const Duration(milliseconds: 500),
-                curve: Curves.easeInOut,
-              );
-            },
-          ),
-        ),
-      );
-    }
   }
 
   /// 팔로우 토글
@@ -620,13 +632,13 @@ class _HomeTabState extends State<HomeTab> {
     final feed = _feedData[index];
     final feedId = feed['id'] as int;
     final userId = AuthStateManager.instance.userName;
-    
+    final messenger = ScaffoldMessenger.of(context);
+
     try {
       // CounterService를 통해 좋아요 토글
       final newLikedState = await CounterService.instance.toggleLike(userId, feedId);
       final newLikeCount = CounterService.instance.getCount('likes', feedId);
       
-      print('💖 좋아요 토글 결과: feedId=$feedId, newLikedState=$newLikedState, newCount=$newLikeCount');
       
       // 🔥 강제 UI 업데이트 - ChatGPT-4o 권장: 명시적 생성자 사용
       final currentLikedFeeds = Map<int, bool>.from(_likedFeeds); // 🔧 생성자 사용
@@ -639,7 +651,6 @@ class _HomeTabState extends State<HomeTab> {
       // AppStateManager를 통해 좋아요 상태 업데이트 (이것이 _likedFeeds getter를 업데이트함)
       await _appStateManager.updateValue('home', 'likedFeeds', currentLikedFeeds);
       
-      print('💖 강제 UI 업데이트 완료: index=$index, liked=${_likedFeeds[index]}, count=${_feedData[index]['likes']}');
       
       // 피드 데이터만 추가로 저장 (좋아요 상태는 이미 위에서 저장됨)
       _appStateManager.updateValue('home', 'feedData', _feedData);
@@ -647,7 +658,7 @@ class _HomeTabState extends State<HomeTab> {
       // 사용자 행동 기록
       _recordUserAction(newLikedState ? 'like' : 'unlike', _feedData[index]);
       
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: Text(newLikedState ? '❤️ 좋아요!' : '🤍 좋아요 취소'),
           backgroundColor: AppTheme.accentPink,
@@ -655,8 +666,7 @@ class _HomeTabState extends State<HomeTab> {
         ),
       );
     } catch (e) {
-      print('❌ 좋아요 토글 실패: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         const SnackBar(
           content: Text('좋아요 처리 중 오류가 발생했습니다.'),
           backgroundColor: Colors.red,
@@ -700,7 +710,8 @@ class _HomeTabState extends State<HomeTab> {
   /// 새 피드 추가 (CounterService 초기화 포함)
   void _addNewFeed(Map<String, dynamic> newFeed) async {
     final feedId = newFeed['id'] as int;
-    
+    final messenger = ScaffoldMessenger.of(context);
+
     // CounterService에 초기 카운트 설정
     await CounterService.instance.initializeFeedCounts(
       feedId,
@@ -708,7 +719,16 @@ class _HomeTabState extends State<HomeTab> {
       comments: newFeed['comments'] ?? 0,
       shares: newFeed['shares'] ?? 0,
     );
-    
+
+    // Supabase에 비동기 저장 (논블로킹)
+    FeedService.instance.createFeed(
+      content: newFeed['content'] as String? ?? '',
+      title: newFeed['title'] as String?,
+      mediaType: newFeed['mediaType'] as String? ?? 'text',
+      mediaUrl: newFeed['mediaUrl'] as String?,
+      mediaData: newFeed['mediaData'] as Uint8List?,
+    ).catchError((_) => null);
+
     setState(() {
       _feedData.insert(0, newFeed);
       _allFeedData.insert(0, newFeed);
@@ -717,15 +737,14 @@ class _HomeTabState extends State<HomeTab> {
     // AppStateManager에 저장
     AppStateManager.instance.updateValue('home', 'feedData', _feedData);
     
-    ScaffoldMessenger.of(context).showSnackBar(
+    messenger.showSnackBar(
       const SnackBar(
         content: Text('새 피드가 추가되었습니다!'),
         backgroundColor: AppTheme.accentPink,
         duration: Duration(seconds: 2),
       ),
     );
-    
-    print('📝 새 피드 추가 및 CounterService 초기화 완료: feedId=$feedId');
+
   }
 
   // 피드 추가 모달 표시
@@ -871,6 +890,7 @@ class _HomeTabState extends State<HomeTab> {
         onUploadComplete: (title, content, mediaData) {
           _addNewFeed({
             'id': DateTime.now().millisecondsSinceEpoch,
+            'supabaseId': null,
             'author': AuthStateManager.instance.userName,
             'authorAvatar': AuthStateManager.instance.profileImageBytes != null
                 ? MemoryImage(AuthStateManager.instance.profileImageBytes!)
@@ -884,7 +904,8 @@ class _HomeTabState extends State<HomeTab> {
             'timestamp': '방금 전',
             'mediaType': uploadType,
             'mediaData': mediaData,
-            'mediaUrl': null, // 실제 URL은 백엔드에서 처리
+            'mediaUrl': null,
+            'tags': <String>[],
           });
         },
       ),
@@ -947,6 +968,7 @@ class _HomeTabState extends State<HomeTab> {
               if (titleController.text.isNotEmpty && contentController.text.isNotEmpty) {
                 _addNewFeed({
                   'id': DateTime.now().millisecondsSinceEpoch,
+                  'supabaseId': null,
                   'author': AuthStateManager.instance.userName,
                   'authorAvatar': AuthStateManager.instance.profileImageBytes != null
                       ? MemoryImage(AuthStateManager.instance.profileImageBytes!)
@@ -959,6 +981,7 @@ class _HomeTabState extends State<HomeTab> {
                   'shares': 0,
                   'timestamp': '방금 전',
                   'mediaType': 'text',
+                  'tags': <String>[],
                 });
                 Navigator.of(context).pop();
               }
@@ -984,6 +1007,9 @@ class _HomeTabState extends State<HomeTab> {
             // 헤더
             _buildHeader(context),
             
+              // 전체 | 팔로잉 토글
+            _buildFeedModeToggle(),
+
             // 피드 목록 (새로고침 + 무한 스크롤)
             Expanded(
               child: RefreshIndicator(
@@ -1000,7 +1026,20 @@ class _HomeTabState extends State<HomeTab> {
                       return _buildLoadingIndicator();
                     }
                     final feed = _feedData[index];
-                    return _buildFeedCard(feed, index);
+                    return FeedCard(
+                      feed: feed,
+                      index: index,
+                      isLiked: _likedFeeds[index] ?? false,
+                      isSaved: _savedFeeds[index] == true,
+                      isFollowed: _followedUsers.contains(feed['author']),
+                      onToggleLike: () => _toggleLike(index),
+                      onToggleSave: () => _toggleSave(index),
+                      onToggleFollow: () => _toggleFollow(feed['author']),
+                      onShowComments: () => _showCommentModal(feed),
+                      onShowShare: () => _showShareModal(feed),
+                      onShowOptions: () => _showFeedOptions(feed),
+                      onTapProfile: () => _showUserProfile(feed['author']),
+                    );
                   },
                 ),
               ),
@@ -1021,6 +1060,42 @@ class _HomeTabState extends State<HomeTab> {
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+    );
+  }
+
+  /// 전체 | 팔로잉 피드 모드 토글
+  Widget _buildFeedModeToggle() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Row(
+        children: ['전체', '팔로잉'].map((mode) {
+          final selected = _feedMode == mode;
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: GestureDetector(
+              onTap: () => _switchFeedMode(mode),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                decoration: BoxDecoration(
+                  color: selected ? AppTheme.accentPink : Colors.transparent,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: selected ? AppTheme.accentPink : AppTheme.grey,
+                  ),
+                ),
+                child: Text(
+                  mode,
+                  style: TextStyle(
+                    color: selected ? AppTheme.white : AppTheme.grey,
+                    fontSize: 13,
+                    fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                  ),
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
     );
   }
 
@@ -1105,241 +1180,39 @@ class _HomeTabState extends State<HomeTab> {
               // TODO: 검색
             },
           ),
-          IconButton(
-            icon: const Icon(Icons.notifications_outlined, color: AppTheme.white),
-            onPressed: () {
-              // TODO: 알림
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  // 피드 카드 빌드
-  Widget _buildFeedCard(Map<String, dynamic> feed, int index) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: AppTheme.secondaryBlack,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.grey.withValues(alpha: 0.2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 피드 헤더
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                // 작성자 아이콘 (클릭 가능)
-                GestureDetector(
-                  onTap: () => _showUserProfile(feed['author']),
-                  child: CircleAvatar(
-                    radius: 20,
-                    backgroundColor: AppTheme.accentPink,
-                    backgroundImage: feed['author'] == AuthStateManager.instance.userName && 
-                                    AuthStateManager.instance.profileImageBytes != null
-                        ? MemoryImage(AuthStateManager.instance.profileImageBytes!)
-                        : null,
-                    child: feed['author'] == AuthStateManager.instance.userName && 
-                           AuthStateManager.instance.profileImageBytes != null
-                        ? null
-                        : _buildSafeAvatarText(feed['authorAvatar']),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // 작성자 정보
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  feed['author'],
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: AppTheme.white,
-                                  ),
-                                ),
-                                Text(
-                                  feed['timestamp'],
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: AppTheme.grey,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                // 팔로우 버튼
-                if (feed['author'] != '나') // 자신의 피드는 팔로우 버튼 숨김
-                  GestureDetector(
-                    onTap: () => _toggleFollow(feed['author']),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: _followedUsers.contains(feed['author']) 
-                          ? AppTheme.grey.withValues(alpha: 0.3)
-                          : AppTheme.accentPink,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: _followedUsers.contains(feed['author']) 
-                            ? AppTheme.grey 
-                            : AppTheme.accentPink,
-                        ),
-                      ),
-                      child: Text(
-                        _followedUsers.contains(feed['author']) ? '팔로잉' : '팔로우',
-                        style: TextStyle(
-                          color: _followedUsers.contains(feed['author']) 
-                            ? AppTheme.grey 
-                            : AppTheme.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+          Stack(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.notifications_outlined,
+                    color: AppTheme.white),
+                onPressed: () async {
+                  await Navigator.of(context).push(
+                    MaterialPageRoute(
+                        builder: (_) => const NotificationsScreen()),
+                  );
+                  _loadUnreadCount();
+                },
+              ),
+              if (_unreadNotificationCount > 0)
+                Positioned(
+                  right: 6,
+                  top: 6,
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: const BoxDecoration(
+                      color: AppTheme.accentPink,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      '$_unreadNotificationCount',
+                      style: const TextStyle(
+                          color: AppTheme.white, fontSize: 10),
                     ),
                   ),
-                IconButton(
-                  icon: const Icon(Icons.more_vert, color: AppTheme.grey),
-                  onPressed: () => _showFeedOptions(feed),
                 ),
-              ],
-            ),
-          ),
-          
-          // 피드 제목
-          if (feed['title'] != null && feed['title'].toString().isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                feed['title'],
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: AppTheme.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          
-          // 피드 내용
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(
-              feed['content'],
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: AppTheme.white,
-              ),
-            ),
-          ),
-          
-          // 미디어 콘텐츠
-          if (feed['mediaType'] != 'text')
-            _buildMediaContent(feed),
-          
-          // 액션 버튼들
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              children: [
-                _buildActionButton(
-                  icon: (_likedFeeds[index] ?? false) ? Icons.favorite : Icons.favorite_border,
-                  label: '${feed['likes']}',
-                  isActive: _likedFeeds[index] ?? false,
-                  onTap: () {
-                    print('💖 좋아요 버튼 클릭: index=$index, 현재상태=${_likedFeeds[index]}');
-                    _toggleLike(index);
-                  },
-                ),
-                const SizedBox(width: 24),
-                _buildActionButton(
-                  icon: Icons.chat_bubble_outline,
-                  label: '${feed['comments']}',
-                  isActive: false,
-                  onTap: () => _showCommentModal(feed),
-                ),
-                const SizedBox(width: 24),
-                _buildActionButton(
-                  icon: Icons.share,
-                  label: '${feed['shares']}',
-                  isActive: false,
-                  onTap: () => _showShareModal(feed),
-                ),
-                const Spacer(),
-                _buildActionButton(
-                  icon: _savedFeeds[index] == true ? Icons.bookmark : Icons.bookmark_border,
-                  label: '저장',
-                  isActive: _savedFeeds[index] == true,
-                  onTap: () => _toggleSave(index),
-                ),
-              ],
-            ),
+            ],
           ),
         ],
-      ),
-    );
-  }
-
-  // 미디어 콘텐츠 빌드
-  Widget _buildMediaContent(Map<String, dynamic> feed) {
-    final mediaType = feed['mediaType'];
-    
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: MediaPlayerWidget(
-        mediaType: mediaType,
-        mediaUrl: feed['mediaUrl'],
-        mediaData: feed['mediaData'],
-        title: feed['title'] ?? '미디어 콘텐츠',
-      ),
-    );
-  }
-
-  // 액션 버튼 빌드
-  Widget _buildActionButton({
-    required IconData icon,
-    required String label,
-    required bool isActive,
-    required VoidCallback onTap,
-  }) {
-    // 좋아요 버튼인 경우 디버깅 로그
-    if (icon == Icons.favorite || icon == Icons.favorite_border) {
-      print('💖 하트 버튼 빌드: icon=$icon, isActive=$isActive, label=$label');
-    }
-    
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 20,
-              color: isActive ? AppTheme.accentPink : AppTheme.grey,
-            ),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: isActive ? AppTheme.accentPink : AppTheme.grey,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -1376,7 +1249,11 @@ class _HomeTabState extends State<HomeTab> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => CommentModal(feedId: feed['id'], feedTitle: feed['title']),
+      builder: (context) => CommentModal(
+        feedId: feed['id'],
+        feedTitle: feed['title'],
+        supabaseFeedId: feed['supabaseId'] as String?,
+      ),
     ).then((_) {
       // 모달이 닫힌 후 댓글 수 업데이트
       _updateCommentCount(feed['id']);
@@ -1401,12 +1278,21 @@ class _HomeTabState extends State<HomeTab> {
 
   /// 피드 업데이트
   void _updateFeed(Map<String, dynamic> updatedFeed) {
+    // Supabase 업데이트 (논블로킹)
+    final supabaseId = updatedFeed['supabaseId'] as String?;
+    if (supabaseId != null) {
+      final title = updatedFeed['title'] as String? ?? '';
+      final body = updatedFeed['content'] as String? ?? '';
+      final fullContent = title.isNotEmpty ? '$title\n$body' : body;
+      FeedService.instance.updateFeed(supabaseId, content: fullContent).catchError((_) {});
+    }
+
     setState(() {
       final index = _feedData.indexWhere((feed) => feed['id'] == updatedFeed['id']);
       if (index != -1) {
         _feedData[index] = updatedFeed;
       }
-      
+
       final allIndex = _allFeedData.indexWhere((feed) => feed['id'] == updatedFeed['id']);
       if (allIndex != -1) {
         _allFeedData[allIndex] = updatedFeed;
@@ -1416,6 +1302,16 @@ class _HomeTabState extends State<HomeTab> {
 
   /// 피드 삭제
   void _deleteFeed(int feedId) {
+    // Supabase ID 추출 후 삭제 (논블로킹)
+    final feed = _feedData.firstWhere(
+      (f) => f['id'] == feedId,
+      orElse: () => _allFeedData.firstWhere((f) => f['id'] == feedId, orElse: () => {}),
+    );
+    final supabaseId = feed['supabaseId'] as String?;
+    if (supabaseId != null) {
+      FeedService.instance.deleteFeed(supabaseId).catchError((_) {});
+    }
+
     setState(() {
       _feedData.removeWhere((feed) => feed['id'] == feedId);
       _allFeedData.removeWhere((feed) => feed['id'] == feedId);
@@ -1462,19 +1358,6 @@ class _HomeTabState extends State<HomeTab> {
     // AppStateManager에 업데이트된 피드 데이터 저장
     AppStateManager.instance.updateValue('home', 'feedData', _feedData);
     
-    print('🔗 공유 카운트 업데이트: feedId=$feedId, count=$shareCount');
-  }
-
-  /// 신고 모달 표시
-  void _showReportModal(Map<String, dynamic> feed) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppTheme.secondaryBlack,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => ReportModal(feed: feed),
-    );
   }
 
   /// 개인화 모드 토글
@@ -1482,61 +1365,9 @@ class _HomeTabState extends State<HomeTab> {
     await _updatePersonalizedMode(!_isPersonalizedMode);
   }
 
-  /// 개인화 추천 적용
-  Future<void> _applyPersonalizedRecommendations() async {
-    try {
-      final personalizedFeeds = await _recommendationService.getPersonalizedFeed(
-        userId: 'current-user-id', // TODO: 실제 사용자 ID로 변경
-        limit: _itemsPerPage,
-      );
-      
-      setState(() {
-        _feedData = personalizedFeeds.take(_itemsPerPage).toList();
-        _currentPage = 1;
-        _hasMoreData = personalizedFeeds.length > _itemsPerPage;
-      });
-    } catch (e) {
-      // 오류 발생 시 기본 피드 사용
-      setState(() {
-        _feedData = _allFeedData.take(_itemsPerPage).toList();
-        _currentPage = 1;
-        _hasMoreData = _allFeedData.length > _itemsPerPage;
-      });
-    }
-  }
-
   /// 오프라인 모드 토글
   Future<void> _toggleOfflineMode() async {
     await _updateOfflineMode(!_isOfflineMode);
-  }
-
-  /// 오프라인 데이터 로드
-  Future<void> _loadOfflineData() async {
-    final cachedFeeds = await _offlineService.loadCachedFeeds();
-    if (cachedFeeds.isNotEmpty) {
-      setState(() {
-        _feedData = cachedFeeds.take(_itemsPerPage).toList();
-        _currentPage = 1;
-        _hasMoreData = cachedFeeds.length > _itemsPerPage;
-      });
-    }
-  }
-
-  /// 라이브 스트림 시작
-  void _startLiveStream() {
-    final streamData = {
-      'id': DateTime.now().millisecondsSinceEpoch,
-      'title': '라이브 음악 스트림',
-      'author': 'LiveStreamer',
-      'authorAvatar': '🎵',
-      'genre': '팝',
-    };
-
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => LiveStreamingScreen(stream: streamData),
-      ),
-    );
   }
 
   /// 트렌딩 피드 열기
@@ -1568,19 +1399,4 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  /// 안전한 아바타 텍스트 빌드 (MemoryImage 타입 처리)
-  Widget _buildSafeAvatarText(dynamic avatar) {
-    if (avatar is String) {
-      return Text(
-        avatar,
-        style: const TextStyle(fontSize: 16),
-      );
-    } else {
-      // MemoryImage 등 복잡한 타입인 경우 기본 아이콘 표시
-      return const Text(
-        '👤',
-        style: TextStyle(fontSize: 16),
-      );
-    }
-  }
 } 
