@@ -14,17 +14,11 @@ class SupabaseService {
 
   /// Supabase 초기화
   Future<void> initialize() async {
-    // 환경 변수 로드 시도 (실패해도 계속 진행)
-    try {
-      await dotenv.load(fileName: "assets/.env");
-    } catch (e) {
-      print('환경 변수 로드 실패, 하드코딩된 값 사용: $e');
-    }
-    
-    // 하드코딩된 Supabase 설정
-    const supabaseUrl = 'https://aadlqmyynidfsygnxnnk.supabase.co';
-    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhZGxxbXl5bmlkZnN5Z254bm5rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQyNDIwMjUsImV4cCI6MjA2OTgxODAyNX0.6ymus7BN145eQsKHSOBwajuCq17fjIEd7Hf0fpTZ-8Y';
-    
+    await dotenv.load(fileName: ".env");
+
+    final supabaseUrl = dotenv.env['SUPABASE_URL']!;
+    final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY']!;
+
     await Supabase.initialize(
       url: supabaseUrl,
       anonKey: supabaseAnonKey,
@@ -68,6 +62,33 @@ class SupabaseService {
     );
   }
 
+  /// 회원가입 + profiles 테이블 초기 행 생성 (원자적 처리)
+  Future<AuthResponse> signUpWithProfile({
+    required String email,
+    required String password,
+    required String nickname,
+  }) async {
+    final response = await _client.auth.signUp(
+      email: email,
+      password: password,
+      data: {'nickname': nickname},
+    );
+
+    if (response.user != null && response.session != null) {
+      final username = email.split('@')[0];
+      await _client.from('profiles').upsert({
+        'id': response.user!.id,
+        'username': username,
+        'nickname': nickname,
+        'bio': '새로운 음악인입니다 🎵',
+        'instruments': '기타, 피아노',
+        'created_at': DateTime.now().toIso8601String(),
+      });
+    }
+
+    return response;
+  }
+
   /// 사용자 프로필 업데이트
   Future<void> updateUserProfile({
     required String userId,
@@ -88,8 +109,8 @@ class SupabaseService {
         .from('profiles')
         .select()
         .eq('id', userId)
-        .single();
-    
+        .maybeSingle();
+
     return response;
   }
 
@@ -193,6 +214,52 @@ class SupabaseService {
         .getPublicUrl(fileName);
   }
 
+  /// 아바타 이미지 업로드 (upsert) 후 공개 URL 반환
+  Future<String> uploadAvatar({
+    required String userId,
+    required Uint8List imageBytes,
+  }) async {
+    const bucketName = 'avatars';
+    final fileName = '$userId.jpg';
+
+    await _client.storage.from(bucketName).uploadBinary(
+      fileName,
+      imageBytes,
+      fileOptions: const FileOptions(upsert: true, contentType: 'image/jpeg'),
+    );
+
+    return _client.storage.from(bucketName).getPublicUrl(fileName);
+  }
+
+  /// 미디어 파일 업로드 (media 버킷) 후 공개 URL 반환
+  /// [mediaType] 은 'image' | 'video' | 'audio'
+  Future<String> uploadMedia({
+    required String userId,
+    required Uint8List fileBytes,
+    required String mediaType,
+  }) async {
+    const bucketName = 'media';
+    final ext = mediaType == 'video'
+        ? 'mp4'
+        : mediaType == 'audio'
+            ? 'mp3'
+            : 'jpg';
+    final contentType = mediaType == 'video'
+        ? 'video/mp4'
+        : mediaType == 'audio'
+            ? 'audio/mpeg'
+            : 'image/jpeg';
+    final fileName = '$userId/${DateTime.now().millisecondsSinceEpoch}.$ext';
+
+    await _client.storage.from(bucketName).uploadBinary(
+      fileName,
+      fileBytes,
+      fileOptions: FileOptions(upsert: false, contentType: contentType),
+    );
+
+    return _client.storage.from(bucketName).getPublicUrl(fileName);
+  }
+
   /// 파일 경로로 업로드 (웹 환경용)
   Future<String> uploadFileFromPath({
     required String bucketName,
@@ -204,19 +271,98 @@ class SupabaseService {
     throw UnimplementedError('uploadFileFromPath는 아직 구현되지 않았습니다. uploadFile을 사용하세요.');
   }
 
+  /// 피드 삭제
+  Future<void> deleteFeed(String feedId) async {
+    await _client.from('feeds').delete().eq('id', feedId);
+  }
+
+  /// 피드 콘텐츠 업데이트
+  Future<void> updateFeedContent({
+    required String feedId,
+    required String content,
+  }) async {
+    await _client.from('feeds').update({
+      'content': content,
+      'updated_at': DateTime.now().toIso8601String(),
+    }).eq('id', feedId);
+  }
+
+  /// 피드별 댓글 가져오기 (profiles join, created_at 오름차순)
+  Future<List<Map<String, dynamic>>> getComments(String feedId) async {
+    final response = await _client
+        .from('comments')
+        .select('''
+          *,
+          profiles:author_id (
+            id,
+            username,
+            nickname,
+            avatar_url
+          )
+        ''')
+        .eq('feed_id', feedId)
+        .order('created_at', ascending: true);
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  /// 댓글 추가 후 삽입된 행 반환
+  Future<Map<String, dynamic>> addComment({
+    required String feedId,
+    required String authorId,
+    required String content,
+    String? parentId,
+  }) async {
+    final data = <String, dynamic>{
+      'feed_id': feedId,
+      'author_id': authorId,
+      'content': content,
+      'created_at': DateTime.now().toIso8601String(),
+    };
+    if (parentId != null) data['parent_id'] = parentId;
+
+    final response = await _client
+        .from('comments')
+        .insert(data)
+        .select('''
+          *,
+          profiles:author_id (
+            id,
+            username,
+            nickname,
+            avatar_url
+          )
+        ''')
+        .single();
+    return Map<String, dynamic>.from(response);
+  }
+
+  /// 댓글 삭제
+  Future<void> deleteComment(String commentId) async {
+    await _client.from('comments').delete().eq('id', commentId);
+  }
+
+  /// 댓글 내용 수정
+  Future<void> updateCommentContent({
+    required String commentId,
+    required String content,
+  }) async {
+    await _client
+        .from('comments')
+        .update({'content': content})
+        .eq('id', commentId);
+  }
+
   /// 백엔드 연결 테스트
   Future<bool> testConnection() async {
     try {
       // 간단한 쿼리로 연결 테스트
-      final response = await _client
+      await _client
           .from('profiles')
           .select('count')
           .limit(1);
-      
-      print('✅ Supabase 연결 성공!');
+
       return true;
     } catch (e) {
-      print('❌ Supabase 연결 실패: $e');
       return false;
     }
   }
@@ -225,35 +371,171 @@ class SupabaseService {
   Future<void> checkDatabaseSchema() async {
     try {
       // profiles 테이블 확인
-      final profilesResponse = await _client
-          .from('profiles')
-          .select('*')
-          .limit(1);
-      print('✅ profiles 테이블 확인됨');
-      
+      await _client.from('profiles').select('*').limit(1);
+
       // feeds 테이블 확인
-      final feedsResponse = await _client
-          .from('feeds')
-          .select('*')
-          .limit(1);
-      print('✅ feeds 테이블 확인됨');
-      
+      await _client.from('feeds').select('*').limit(1);
+
       // jam_sessions 테이블 확인
-      final jamSessionsResponse = await _client
-          .from('jam_sessions')
-          .select('*')
-          .limit(1);
-      print('✅ jam_sessions 테이블 확인됨');
-      
+      await _client.from('jam_sessions').select('*').limit(1);
+
       // chat_messages 테이블 확인
-      final chatMessagesResponse = await _client
-          .from('chat_messages')
-          .select('*')
-          .limit(1);
-      print('✅ chat_messages 테이블 확인됨');
-      
-    } catch (e) {
-      print('❌ 데이터베이스 스키마 확인 실패: $e');
+      await _client.from('chat_messages').select('*').limit(1);
+
+    } catch (e) { // ignore: empty_catches
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // A-7 Chat
+  // ---------------------------------------------------------------------------
+
+  /// DM 채팅방 찾기 또는 생성
+  Future<String> getOrCreateDmRoom(String myId, String otherId) async {
+    // 내가 속한 DM 방 목록 조회
+    final myMemberships = await _client
+        .from('chat_members')
+        .select('room_id, chat_rooms!inner(type)')
+        .eq('user_id', myId);
+
+    final myDmRoomIds = (myMemberships as List)
+        .where((m) => (m['chat_rooms'] as Map?)?['type'] == 'dm')
+        .map((m) => m['room_id'] as String?)
+        .whereType<String>()
+        .toList();
+
+    if (myDmRoomIds.isNotEmpty) {
+      final sharedRoom = await _client
+          .from('chat_members')
+          .select('room_id')
+          .eq('user_id', otherId)
+          .inFilter('room_id', myDmRoomIds)
+          .maybeSingle();
+      if (sharedRoom != null) return sharedRoom['room_id'] as String;
+    }
+
+    // 새 DM 방 생성
+    final room = await _client
+        .from('chat_rooms')
+        .insert({'type': 'dm'})
+        .select('id')
+        .single();
+    final roomId = room['id'] as String;
+    await _client.from('chat_members').insert([
+      {'room_id': roomId, 'user_id': myId},
+      {'room_id': roomId, 'user_id': otherId},
+    ]);
+    return roomId;
+  }
+
+  /// 내 채팅방 목록 (상대방 프로필 + 최근 메시지)
+  Future<List<Map<String, dynamic>>> getMyChatRooms(String myId) async {
+    final memberships = await _client
+        .from('chat_members')
+        .select('room_id')
+        .eq('user_id', myId);
+
+    final roomIds = (memberships as List)
+        .map((m) => m['room_id'] as String)
+        .toList();
+    if (roomIds.isEmpty) return [];
+
+    // 각 방의 상대방 프로필
+    final otherMembers = await _client
+        .from('chat_members')
+        .select('room_id, user_id, profiles:user_id(id, username, nickname, avatar_url)')
+        .inFilter('room_id', roomIds)
+        .neq('user_id', myId);
+
+    // 각 방의 최근 메시지
+    final messages = await _client
+        .from('chat_messages')
+        .select('room_id, content, created_at, sender_id')
+        .inFilter('room_id', roomIds)
+        .order('created_at', ascending: false);
+
+    // roomId → 최신 메시지
+    final latestMessages = <String, Map<String, dynamic>>{};
+    for (final msg in (messages as List)) {
+      final rId = msg['room_id'] as String;
+      if (!latestMessages.containsKey(rId)) {
+        latestMessages[rId] = Map<String, dynamic>.from(msg);
+      }
+    }
+
+    // roomId → 상대방
+    final membersByRoom = <String, Map<String, dynamic>>{};
+    for (final m in (otherMembers as List)) {
+      final rId = m['room_id'] as String;
+      if (!membersByRoom.containsKey(rId)) {
+        membersByRoom[rId] = Map<String, dynamic>.from(m);
+      }
+    }
+
+    return roomIds.map((roomId) => <String, dynamic>{
+      'roomId': roomId,
+      'member': membersByRoom[roomId],
+      'lastMessage': latestMessages[roomId],
+    }).toList();
+  }
+
+  /// 채팅방 메시지 조회
+  Future<List<Map<String, dynamic>>> getRoomMessages(String roomId) async {
+    final response = await _client
+        .from('chat_messages')
+        .select('*, profiles:sender_id(id, username, nickname, avatar_url)')
+        .eq('room_id', roomId)
+        .order('created_at', ascending: true);
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  /// 채팅 메시지 전송
+  Future<Map<String, dynamic>?> sendChatMessage({
+    required String roomId,
+    required String senderId,
+    required String content,
+  }) async {
+    try {
+      final response = await _client
+          .from('chat_messages')
+          .insert({
+            'room_id': roomId,
+            'sender_id': senderId,
+            'content': content,
+            'created_at': DateTime.now().toIso8601String(),
+          })
+          .select()
+          .single();
+      return Map<String, dynamic>.from(response);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 채팅방 실시간 구독 (room_id 필터)
+  RealtimeChannel subscribeToRoomMessages(
+    String roomId,
+    void Function(Map<String, dynamic> payload) onInsert,
+  ) {
+    final channel = _client.channel('chat_room_$roomId');
+    channel
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'chat_messages',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'room_id',
+            value: roomId,
+          ),
+          callback: (payload) => onInsert(payload.newRecord),
+        )
+        .subscribe();
+    return channel;
+  }
+
+  /// 채팅 구독 해제
+  Future<void> unsubscribeFromChannel(RealtimeChannel channel) async {
+    await _client.removeChannel(channel);
   }
 } 

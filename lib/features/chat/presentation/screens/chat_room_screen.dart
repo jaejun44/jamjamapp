@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
-import '../../../home/presentation/widgets/user_profile_screen.dart';
+import 'package:jamjamapp/core/services/chat_service.dart';
+import '../../../home/presentation/widgets/screens/user_profile_screen.dart';
 
 class ChatRoomScreen extends StatefulWidget {
   final String userName;
   final String userAvatar;
+  final String? otherUserId;
 
   const ChatRoomScreen({
     super.key,
     required this.userName,
     required this.userAvatar,
+    this.otherUserId,
   });
 
   @override
@@ -19,8 +22,11 @@ class ChatRoomScreen extends StatefulWidget {
 class _ChatRoomScreenState extends State<ChatRoomScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  
-  // 실시간 메시지 데이터
+
+  // Supabase 모드 (otherUserId 제공 시 활성화)
+  String? _roomId;
+
+  // 메시지 데이터 (Supabase 모드에서는 실제 데이터로 교체)
   final List<Map<String, dynamic>> _messages = [
     {
       'id': 1,
@@ -62,7 +68,41 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   bool _isTyping = false;
 
   @override
+  void initState() {
+    super.initState();
+    if (widget.otherUserId != null) {
+      _initSupabaseRoom(widget.otherUserId!);
+    }
+  }
+
+  Future<void> _initSupabaseRoom(String otherUserId) async {
+    final roomId = await ChatService.instance.getOrOpenRoom(otherUserId);
+    if (roomId == null || !mounted) return;
+    _roomId = roomId;
+
+    final loaded = await ChatService.instance.loadMessages(roomId);
+    if (!mounted) return;
+    if (loaded.isNotEmpty) {
+      setState(() {
+        _messages
+          ..clear()
+          ..addAll(loaded);
+      });
+      _scrollToBottom();
+    }
+
+    ChatService.instance.subscribeToRoom(roomId, (message) {
+      if (!mounted) return;
+      setState(() => _messages.add(message));
+      _scrollToBottom();
+    });
+  }
+
+  @override
   void dispose() {
+    if (_roomId != null) {
+      ChatService.instance.unsubscribeFromRoom(_roomId!);
+    }
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -71,9 +111,10 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   void _sendMessage() {
     if (_messageController.text.trim().isEmpty) return;
 
+    final text = _messageController.text.trim();
     final newMessage = {
-      'id': _messages.length + 1,
-      'text': _messageController.text.trim(),
+      'id': DateTime.now().millisecondsSinceEpoch,
+      'text': text,
       'isMe': true,
       'timestamp': _getCurrentTime(),
       'type': 'text',
@@ -86,8 +127,13 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     _messageController.clear();
     _scrollToBottom();
 
-    // 상대방 타이핑 시뮬레이션
-    _simulateTyping();
+    if (_roomId != null) {
+      // Supabase 모드: 비동기 전송 (로컬에 이미 추가됨)
+      ChatService.instance.sendMessage(_roomId!, text);
+    } else {
+      // 시뮬레이션 모드
+      _simulateTyping();
+    }
   }
 
   void _simulateTyping() {
@@ -133,7 +179,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     final hour = now.hour;
     final minute = now.minute;
     final period = hour < 12 ? '오전' : '오후';
-    final displayHour = hour > 12 ? hour - 12 : hour;
+    final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
     return '$period ${displayHour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
   }
 
