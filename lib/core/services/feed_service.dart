@@ -120,27 +120,32 @@ class FeedService {
     final userId = SupabaseService.instance.currentUser?.id;
     if (userId == null) return null;
 
-    try {
-      final fullContent =
-          (title != null && title.isNotEmpty) ? '$title\n$content' : content;
+    final fullContent =
+        (title != null && title.isNotEmpty) ? '$title\n$content' : content;
 
-      // mediaData가 있으면 Storage에 업로드 후 URL 획득
-      String? resolvedUrl = mediaUrl;
-      if (mediaData != null && mediaType != 'text') {
+    // 미디어 업로드 (실패해도 피드 저장은 계속 진행)
+    String? resolvedUrl = mediaUrl;
+    if (mediaData != null && mediaType != 'text') {
+      try {
         resolvedUrl = await SupabaseService.instance.uploadMedia(
           userId: userId,
           fileBytes: mediaData,
           mediaType: mediaType,
         );
+      } catch (_) {
+        // 미디어 업로드 실패 — 미디어 없이 피드 저장 진행
+        resolvedUrl = null;
       }
+    }
 
+    try {
       await SupabaseService.instance.createFeed(
         userId: userId,
         content: fullContent,
         mediaUrls: resolvedUrl != null ? [resolvedUrl] : null,
       );
     } catch (_) {
-      // 생성 실패 — 로컬 피드는 이미 표시됨, 조용히 무시
+      // DB 저장 실패 — 로컬 피드는 이미 표시됨
     }
 
     // 즉각 표시용 임시 로컬 피드 반환

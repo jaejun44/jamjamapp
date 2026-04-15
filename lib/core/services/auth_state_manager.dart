@@ -321,6 +321,8 @@ class AuthStateManager {
         // Supabase 동기화 실패 시 로컬 저장은 유지
       }
     }
+
+    _notifyStateChange();
   }
 
   /// 로그인 필요 여부 확인

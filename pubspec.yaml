@@ -51,6 +51,9 @@ dependencies:
   share_plus: ^7.2.2
   url_launcher: ^6.2.4
 
+  # 웹 플랫폼 유틸리티
+  web: ^1.1.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -5,6 +5,8 @@ import 'package:jamjamapp/core/theme/app_theme.dart';
 import 'package:jamjamapp/core/services/auth_state_manager.dart';
 import 'package:jamjamapp/core/services/app_state_manager.dart';
 import 'package:jamjamapp/core/services/jam_service.dart';
+import 'package:jamjamapp/core/utils/media_file_picker.dart'
+    if (dart.library.html) 'package:jamjamapp/core/utils/media_file_picker_web.dart';
 import '../screens/user_profile_screen.dart';
 import '../shared/jam_session_card.dart';
 import '../shared/participant_card.dart';
@@ -44,6 +46,9 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
 
   // 이미지 피커
   final ImagePicker _picker = ImagePicker();
+
+  // 모달 내부 setState (StatefulBuilder에서 주입)
+  StateSetter? _modalSetState;
 
   // 🔄 잼 세션 데이터 안전한 관리 (ListView 호환)
   List<Map<String, dynamic>> _recentJamSessions = [];
@@ -778,8 +783,13 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => _buildJamCreationModal(),
-    );
+      builder: (context) => StatefulBuilder(
+        builder: (context, modalSetState) {
+          _modalSetState = modalSetState;
+          return _buildJamCreationModal();
+        },
+      ),
+    ).then((_) => _modalSetState = null);
   }
 
   /// Jam 생성 모달
@@ -983,6 +993,7 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
                                       _uploadedMediaData = null;
                                       _uploadedMediaType = null;
                                     });
+                                    _modalSetState?.call(() {});
                                   },
                                   icon: const Icon(Icons.close, color: AppTheme.grey, size: 20),
                                 ),
@@ -1527,32 +1538,36 @@ class _JamCreationTabState extends State<JamCreationTab> with AutomaticKeepAlive
     });
 
     try {
-      XFile? pickedFile;
+      Uint8List? bytes;
+
       switch (type) {
         case 'image':
-          pickedFile = await _picker.pickImage(
+          // 이미지는 image_picker로 처리 (웹/네이티브 모두 안정적)
+          final pickedFile = await _picker.pickImage(
             source: ImageSource.gallery,
             maxWidth: 1920,
             maxHeight: 1080,
             imageQuality: 85,
           );
+          if (pickedFile != null) {
+            bytes = await pickedFile.readAsBytes();
+          }
           break;
+
         case 'video':
-          pickedFile = await _picker.pickVideo(
-            source: ImageSource.gallery,
-            maxDuration: const Duration(minutes: 10),
-          );
+          // 웹에서 pickVideo()는 불안정 → 브라우저 native <input> 사용
+          bytes = await pickMediaFile('video/*');
           break;
+
         case 'audio':
-          pickedFile = await _picker.pickMedia();
+          // image_picker는 audio/*를 지원하지 않음 → 브라우저 native <input> 사용
+          bytes = await pickMediaFile('audio/*');
           break;
       }
 
-      if (pickedFile != null) {
-        final bytes = await pickedFile.readAsBytes();
-        setState(() {
-          _uploadedMediaData = bytes;
-        });
+      if (bytes != null) {
+        setState(() { _uploadedMediaData = bytes; });
+        _modalSetState?.call(() {});
       }
     } catch (e) {
       if (!mounted) return;

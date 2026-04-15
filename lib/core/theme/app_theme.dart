@@ -4,9 +4,9 @@ class AppTheme {
   // 색상 팔레트
   static const Color primaryBlack = Color(0xFF000000);
   static const Color secondaryBlack = Color(0xFF1A1A1A);
-  static const Color accentPink = Color(0xFFFF69B4);
-  static const Color lightPink = Color(0xFFFFB6C1);
-  static const Color darkPink = Color(0xFFFF1493);
+  static const Color accentPink = Color(0xFFE8192C);
+  static const Color lightPink = Color(0xFFFF6B78);
+  static const Color darkPink = Color(0xFFC0101F);
   static const Color white = Color(0xFFFFFFFF);
   static const Color grey = Color(0xFF666666);
   static const Color lightGrey = Color(0xFFCCCCCC);

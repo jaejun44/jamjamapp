@@ -1045,6 +1045,7 @@ class _HomeTabState extends State<HomeTab> {
                     }
                     final feed = _feedData[index];
                     return FeedCard(
+                      key: ValueKey(feed['id']),
                       feed: feed,
                       index: index,
                       isLiked: _likedFeeds[index] ?? false,

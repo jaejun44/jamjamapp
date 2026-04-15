@@ -99,7 +99,6 @@ class SupabaseService {
         .upsert({
           'id': userId,
           ...profileData,
-          'updated_at': DateTime.now().toIso8601String(),
         });
   }
 

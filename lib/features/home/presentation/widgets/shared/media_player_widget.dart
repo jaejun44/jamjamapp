@@ -3,6 +3,8 @@ import 'package:video_player/video_player.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:chewie/chewie.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
+import 'package:jamjamapp/core/utils/video_blob_helper.dart'
+    if (dart.library.html) 'package:jamjamapp/core/utils/video_blob_helper_web.dart';
 import '../screens/fullscreen_media_screen.dart';
 import 'dart:typed_data';
 
@@ -32,6 +34,7 @@ class _MediaPlayerWidgetState extends State<MediaPlayerWidget> {
   bool _isInitialized = false;
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
+  String? _blobUrl; // 웹에서 생성한 Blob URL (dispose 시 해제)
 
   @override
   void initState() {
@@ -40,10 +43,36 @@ class _MediaPlayerWidgetState extends State<MediaPlayerWidget> {
   }
 
   @override
+  void didUpdateWidget(MediaPlayerWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 미디어 소스가 바뀌면 컨트롤러를 재초기화
+    if (oldWidget.mediaUrl != widget.mediaUrl ||
+        oldWidget.mediaData != widget.mediaData ||
+        oldWidget.mediaType != widget.mediaType) {
+      _videoController?.dispose();
+      _chewieController?.dispose();
+      _audioPlayer?.dispose();
+      if (_blobUrl != null) {
+        revokeVideoBlobUrl(_blobUrl!);
+        _blobUrl = null;
+      }
+      _videoController = null;
+      _chewieController = null;
+      _audioPlayer = null;
+      _isInitialized = false;
+      _isPlaying = false;
+      _position = Duration.zero;
+      _duration = Duration.zero;
+      _initializePlayer();
+    }
+  }
+
+  @override
   void dispose() {
     _videoController?.dispose();
     _chewieController?.dispose();
     _audioPlayer?.dispose();
+    if (_blobUrl != null) revokeVideoBlobUrl(_blobUrl!);
     super.dispose();
   }
 
@@ -61,17 +90,18 @@ class _MediaPlayerWidgetState extends State<MediaPlayerWidget> {
 
   /// 비디오 플레이어 초기화
   Future<void> _initializeVideoPlayer() async {
-    if (widget.mediaData != null) {
-      // 메모리에서 비디오 재생 (실제로는 임시 파일로 저장해야 함)
-      // 여기서는 시뮬레이션
-      await Future.delayed(const Duration(milliseconds: 500));
-      setState(() {
-        _isInitialized = true;
-      });
-    } else if (widget.mediaUrl != null) {
-      _videoController = VideoPlayerController.networkUrl(Uri.parse(widget.mediaUrl!));
+    String? videoUrl = widget.mediaUrl;
+
+    // 웹에서 로컬 바이트(mediaData)가 있으면 Blob URL로 변환
+    if (widget.mediaData != null && videoUrl == null) {
+      _blobUrl = createVideoBlobUrl(widget.mediaData!);
+      videoUrl = _blobUrl;
+    }
+
+    if (videoUrl != null) {
+      _videoController = VideoPlayerController.networkUrl(Uri.parse(videoUrl));
       await _videoController!.initialize();
-      
+
       _chewieController = ChewieController(
         videoPlayerController: _videoController!,
         autoPlay: false,
@@ -87,7 +117,9 @@ class _MediaPlayerWidgetState extends State<MediaPlayerWidget> {
           bufferedColor: AppTheme.grey.withValues(alpha: 0.5),
         ),
       );
-      
+    }
+
+    if (mounted) {
       setState(() {
         _isInitialized = true;
       });

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
+import 'package:jamjamapp/core/services/auth_state_manager.dart';
 import '../widgets/tabs/home_tab.dart';
 import '../widgets/tabs/search_tab.dart';
 import '../widgets/tabs/jam_creation_tab.dart';
@@ -30,11 +31,16 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   void _onTabTapped(int index) {
+    // Jam 탭(index 2)은 로그인 필요
+    if (index == 2 && AuthStateManager.instance.requiresLogin) {
+      AuthStateManager.instance.showLoginRequiredMessage(context);
+      return;
+    }
     if (_currentIndex != index) {
       setState(() {
         _currentIndex = index;
       });
-      
+
       // 부드러운 페이지 전환
       _pageController.animateToPage(
         index,
@@ -57,11 +63,7 @@ class _MainScreenState extends State<MainScreen> {
     return Scaffold(
       body: PageView(
         controller: _pageController,
-        onPageChanged: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
+        physics: const NeverScrollableScrollPhysics(),
         children: _tabs,
       ),
       bottomNavigationBar: BottomNavigationBar(
