@@ -137,6 +137,28 @@ class SupabaseService {
     return List<Map<String, dynamic>>.from(response);
   }
 
+  /// 내 피드 목록 (user_id 기준)
+  Future<List<Map<String, dynamic>>> getMyFeeds({int limit = 50}) async {
+    final myId = currentUser?.id;
+    if (myId == null) return [];
+    final response = await _client
+        .from('feeds')
+        .select('''
+          *,
+          profiles:user_id (
+            id,
+            username,
+            nickname,
+            bio,
+            avatar_url
+          )
+        ''')
+        .eq('user_id', myId)
+        .order('created_at', ascending: false)
+        .limit(limit);
+    return List<Map<String, dynamic>>.from(response);
+  }
+
   /// 피드 생성
   Future<void> createFeed({
     required String userId,
@@ -793,4 +815,119 @@ class SupabaseService {
         .subscribe();
     return channel;
   }
-} 
+
+  // ── C-2: Bookmarks & Feed Likes ────────────────────────────────────────────
+
+  /// 북마크 추가 (중복 시 무시)
+  Future<void> bookmarkFeed(String feedId) async {
+    final myId = currentUser?.id;
+    if (myId == null) return;
+    await _client.from('bookmarks').upsert(
+      {'user_id': myId, 'feed_id': feedId},
+      onConflict: 'user_id,feed_id',
+    );
+  }
+
+  /// 북마크 제거
+  Future<void> unbookmarkFeed(String feedId) async {
+    final myId = currentUser?.id;
+    if (myId == null) return;
+    await _client
+        .from('bookmarks')
+        .delete()
+        .eq('user_id', myId)
+        .eq('feed_id', feedId);
+  }
+
+  /// 특정 피드가 북마크됐는지 확인
+  Future<bool> isBookmarked(String feedId) async {
+    final myId = currentUser?.id;
+    if (myId == null) return false;
+    final rows = await _client
+        .from('bookmarks')
+        .select('id')
+        .eq('user_id', myId)
+        .eq('feed_id', feedId)
+        .limit(1);
+    return (rows as List).isNotEmpty;
+  }
+
+  /// 내가 북마크한 피드 목록 (feeds 조인)
+  Future<List<Map<String, dynamic>>> getBookmarkedFeeds() async {
+    final myId = currentUser?.id;
+    if (myId == null) return [];
+    final rows = await _client
+        .from('bookmarks')
+        .select('feed_id, created_at, feeds(*)')
+        .eq('user_id', myId)
+        .order('created_at', ascending: false);
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// 피드 좋아요 추가 + likes_count 증가
+  Future<void> likeFeed(String feedId) async {
+    final myId = currentUser?.id;
+    if (myId == null) return;
+    await _client.from('feed_likes').upsert(
+      {'user_id': myId, 'feed_id': feedId},
+      onConflict: 'user_id,feed_id',
+    );
+    await _client.rpc('increment_likes', params: {'feed_id_arg': feedId});
+  }
+
+  /// 피드 좋아요 취소 + likes_count 감소
+  Future<void> unlikeFeed(String feedId) async {
+    final myId = currentUser?.id;
+    if (myId == null) return;
+    final rows = await _client
+        .from('feed_likes')
+        .select('id')
+        .eq('user_id', myId)
+        .eq('feed_id', feedId)
+        .limit(1);
+    if ((rows as List).isEmpty) return;
+    await _client
+        .from('feed_likes')
+        .delete()
+        .eq('user_id', myId)
+        .eq('feed_id', feedId);
+    await _client.rpc('decrement_likes', params: {'feed_id_arg': feedId});
+  }
+
+  /// 특정 피드에 좋아요 눌렀는지 확인
+  Future<bool> isFeedLiked(String feedId) async {
+    final myId = currentUser?.id;
+    if (myId == null) return false;
+    final rows = await _client
+        .from('feed_likes')
+        .select('id')
+        .eq('user_id', myId)
+        .eq('feed_id', feedId)
+        .limit(1);
+    return (rows as List).isNotEmpty;
+  }
+
+  /// 내가 좋아요 한 피드 목록 (feeds 조인)
+  Future<List<Map<String, dynamic>>> getLikedFeeds() async {
+    final myId = currentUser?.id;
+    if (myId == null) return [];
+    final rows = await _client
+        .from('feed_likes')
+        .select('feed_id, created_at, feeds(*)')
+        .eq('user_id', myId)
+        .order('created_at', ascending: false);
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+  /// profiles 테이블 ilike 검색 (username, nickname)
+  Future<List<Map<String, dynamic>>> searchProfiles(String query) async {
+    if (query.trim().isEmpty) return [];
+    final pattern = '%${query.trim()}%';
+    final rows = await _client
+        .from('profiles')
+        .select('id, username, nickname, bio, instruments, avatar_url')
+        .or('username.ilike.$pattern,nickname.ilike.$pattern')
+        .limit(30);
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+}

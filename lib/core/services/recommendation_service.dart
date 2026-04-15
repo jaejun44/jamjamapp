@@ -1,3 +1,4 @@
+import 'connect_service.dart';
 
 class RecommendationService {
   static RecommendationService? _instance;
@@ -12,15 +13,7 @@ class RecommendationService {
     'activity_level': 'high',
   };
 
-  // 추천 알고리즘 가중치
-  final Map<String, double> _weights = {
-    'genre_match': 0.4,
-    'instrument_match': 0.3,
-    'activity_match': 0.2,
-    'location_match': 0.1,
-  };
-
-  /// 사용자 선호도 업데이트
+/// 사용자 선호도 업데이트
   Future<void> updateUserPreferences(Map<String, dynamic> preferences) async {
     _userPreferences.addAll(preferences);
     
@@ -28,106 +21,23 @@ class RecommendationService {
     await Future.delayed(const Duration(milliseconds: 100));
   }
 
-  /// 추천 점수 계산
-  double _calculateRecommendationScore(Map<String, dynamic> user, Map<String, dynamic> target) {
-    double score = 0.0;
-    
-    // 장르 매칭 점수
-    final userGenres = List<String>.from(user['genres'] ?? []);
-    final targetGenres = List<String>.from(target['genres'] ?? []);
-    final genreMatch = _calculateListSimilarity(userGenres, targetGenres);
-    score += genreMatch * _weights['genre_match']!;
-    
-    // 악기 매칭 점수
-    final userInstruments = List<String>.from(user['instruments'] ?? []);
-    final targetInstruments = List<String>.from(target['instruments'] ?? []);
-    final instrumentMatch = _calculateListSimilarity(userInstruments, targetInstruments);
-    score += instrumentMatch * _weights['instrument_match']!;
-    
-    // 활동 수준 매칭
-    final userActivity = user['activity_level'] ?? 'medium';
-    final targetActivity = target['activity_level'] ?? 'medium';
-    final activityMatch = userActivity == targetActivity ? 1.0 : 0.5;
-    score += activityMatch * _weights['activity_match']!;
-    
-    // 위치 매칭 (간단한 구현)
-    final userLocation = user['location'] ?? '';
-    final targetLocation = target['location'] ?? '';
-    final locationMatch = userLocation == targetLocation ? 1.0 : 0.0;
-    score += locationMatch * _weights['location_match']!;
-    
-    return score;
-  }
-
-  /// 리스트 유사도 계산
-  double _calculateListSimilarity(List<String> list1, List<String> list2) {
-    if (list1.isEmpty && list2.isEmpty) return 1.0;
-    if (list1.isEmpty || list2.isEmpty) return 0.0;
-    
-    final intersection = list1.where((item) => list2.contains(item)).length;
-    final union = list1.length + list2.length - intersection;
-    
-    return union > 0 ? intersection / union : 0.0;
-  }
-
-  /// 추천 사용자 목록 생성
+  /// 추천 사용자 목록 생성 (ConnectService 후보 기반)
   Future<List<Map<String, dynamic>>> getRecommendedUsers({
     required String currentUserId,
     int limit = 10,
   }) async {
-    // TODO: 실제 데이터베이스에서 사용자 목록 가져오기
-    final allUsers = [
-      {
-        'id': 'user1',
-        'name': 'JazzMaster',
-        'genres': ['jazz', 'blues'],
-        'instruments': ['saxophone', 'piano'],
-        'activity_level': 'high',
-        'location': 'Seoul',
-      },
-      {
-        'id': 'user2',
-        'name': 'PopLover',
-        'genres': ['pop', 'rock'],
-        'instruments': ['guitar', 'vocals'],
-        'activity_level': 'medium',
-        'location': 'Busan',
-      },
-      {
-        'id': 'user3',
-        'name': 'ClassicalFan',
-        'genres': ['classical', 'jazz'],
-        'instruments': ['violin', 'piano'],
-        'activity_level': 'low',
-        'location': 'Seoul',
-      },
-    ];
-    
-    // 현재 사용자 정보 (실제로는 데이터베이스에서 가져와야 함)
-    final currentUser = {
-      'id': currentUserId,
-      'genres': _userPreferences['genres'],
-      'instruments': _userPreferences['instruments'],
-      'activity_level': _userPreferences['activity_level'],
-      'location': 'Seoul',
-    };
-    
-    // 추천 점수 계산 및 정렬
-    final recommendations = allUsers
-        .where((user) => user['id'] != currentUserId)
-        .map((user) {
-          final score = _calculateRecommendationScore(currentUser, user);
-          return {
-            ...user,
-            'recommendation_score': score,
-          };
-        })
-        .toList();
-    
-    recommendations.sort((a, b) => 
-        (b['recommendation_score'] as double).compareTo(a['recommendation_score'] as double));
-    
-    return recommendations.take(limit).toList();
+    final candidates = await ConnectService.instance.getCandidates();
+    return candidates.take(limit).map((c) => {
+      'id': c['userId'] as String? ?? '',
+      'name': (c['nickname'] as String?)?.isNotEmpty == true
+          ? c['nickname'] as String
+          : c['username'] as String? ?? 'Unknown',
+      'genres': <String>[],
+      'instruments': <String>[],
+      'activity_level': 'medium',
+      'location': '',
+      'recommendation_score': 1.0,
+    }).toList();
   }
 
   /// 추천 콘텐츠 생성

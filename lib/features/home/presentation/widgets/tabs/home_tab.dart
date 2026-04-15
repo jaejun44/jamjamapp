@@ -4,6 +4,7 @@ import 'package:jamjamapp/core/services/app_state_manager.dart';
 import 'package:jamjamapp/core/services/auth_state_manager.dart';
 import 'package:jamjamapp/core/services/comment_service.dart';
 import 'package:jamjamapp/core/services/counter_service.dart';
+import 'package:jamjamapp/core/services/like_service.dart';
 import 'package:jamjamapp/core/services/feed_service.dart';
 import 'package:jamjamapp/core/services/follow_service.dart';
 import 'package:jamjamapp/core/services/supabase_service.dart';
@@ -621,7 +622,7 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  // 좋아요 상태 토글 (CounterService 사용 + 강제 UI 업데이트)
+  // 좋아요 상태 토글 (LikeService → Supabase feed_likes 연동)
   void _toggleLike(int index) async {
     // 로그인 상태 확인
     if (AuthStateManager.instance.requiresLogin) {
@@ -630,49 +631,66 @@ class _HomeTabState extends State<HomeTab> {
     }
 
     final feed = _feedData[index];
-    final feedId = feed['id'] as int;
-    final userId = AuthStateManager.instance.userName;
+    final supabaseId = feed['supabaseId'] as String?;
     final messenger = ScaffoldMessenger.of(context);
 
-    try {
-      // CounterService를 통해 좋아요 토글
-      final newLikedState = await CounterService.instance.toggleLike(userId, feedId);
-      final newLikeCount = CounterService.instance.getCount('likes', feedId);
-      
-      
-      // 🔥 강제 UI 업데이트 - ChatGPT-4o 권장: 명시적 생성자 사용
-      final currentLikedFeeds = Map<int, bool>.from(_likedFeeds); // 🔧 생성자 사용
-      currentLikedFeeds[index] = newLikedState;
-      
-      setState(() {
-        _feedData[index]['likes'] = newLikeCount;
-      });
-      
-      // AppStateManager를 통해 좋아요 상태 업데이트 (이것이 _likedFeeds getter를 업데이트함)
-      await _appStateManager.updateValue('home', 'likedFeeds', currentLikedFeeds);
-      
-      
-      // 피드 데이터만 추가로 저장 (좋아요 상태는 이미 위에서 저장됨)
-      _appStateManager.updateValue('home', 'feedData', _feedData);
-      
-      // 사용자 행동 기록
-      _recordUserAction(newLikedState ? 'like' : 'unlike', _feedData[index]);
-      
-      messenger.showSnackBar(
-        SnackBar(
+    // supabaseId가 없는 피드(로컬 임시 피드)는 CounterService 폴백
+    if (supabaseId == null) {
+      final feedId = feed['id'] as int;
+      final userId = AuthStateManager.instance.userName;
+      try {
+        final newLikedState = await CounterService.instance.toggleLike(userId, feedId);
+        final newLikeCount = CounterService.instance.getCount('likes', feedId);
+        final currentLikedFeeds = Map<int, bool>.from(_likedFeeds);
+        currentLikedFeeds[index] = newLikedState;
+        setState(() { _feedData[index]['likes'] = newLikeCount; });
+        await _appStateManager.updateValue('home', 'likedFeeds', currentLikedFeeds);
+        _appStateManager.updateValue('home', 'feedData', _feedData);
+        _recordUserAction(newLikedState ? 'like' : 'unlike', _feedData[index]);
+        messenger.showSnackBar(SnackBar(
           content: Text(newLikedState ? '❤️ 좋아요!' : '🤍 좋아요 취소'),
           backgroundColor: AppTheme.accentPink,
           duration: const Duration(seconds: 1),
-        ),
-      );
-    } catch (e) {
-      messenger.showSnackBar(
-        const SnackBar(
+        ));
+      } catch (_) {
+        messenger.showSnackBar(const SnackBar(
           content: Text('좋아요 처리 중 오류가 발생했습니다.'),
           backgroundColor: Colors.red,
           duration: Duration(seconds: 2),
-        ),
-      );
+        ));
+      }
+      return;
+    }
+
+    final currentlyLiked = _likedFeeds[index] ?? false;
+    try {
+      if (currentlyLiked) {
+        await LikeService.instance.unlike(supabaseId);
+      } else {
+        await LikeService.instance.like(supabaseId);
+      }
+      final newLikedState = !currentlyLiked;
+      final currentLikedFeeds = Map<int, bool>.from(_likedFeeds);
+      currentLikedFeeds[index] = newLikedState;
+      setState(() {
+        _feedData[index]['likes'] = (_feedData[index]['likes'] as int? ?? 0) + (newLikedState ? 1 : -1);
+      });
+      await _appStateManager.updateValue('home', 'likedFeeds', currentLikedFeeds);
+      _appStateManager.updateValue('home', 'feedData', _feedData);
+      _recordUserAction(newLikedState ? 'like' : 'unlike', _feedData[index]);
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(
+        content: Text(newLikedState ? '❤️ 좋아요!' : '🤍 좋아요 취소'),
+        backgroundColor: AppTheme.accentPink,
+        duration: const Duration(seconds: 1),
+      ));
+    } catch (_) {
+      if (!mounted) return;
+      messenger.showSnackBar(const SnackBar(
+        content: Text('좋아요 처리 중 오류가 발생했습니다.'),
+        backgroundColor: Colors.red,
+        duration: Duration(seconds: 2),
+      ));
     }
   }
 

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
 import 'package:jamjamapp/core/services/auth_state_manager.dart';
+import 'package:jamjamapp/core/services/follow_service.dart';
 import 'package:jamjamapp/core/services/profile_image_manager.dart';
+import 'package:jamjamapp/core/services/supabase_service.dart';
 import '../../../../auth/presentation/widgets/login_modal.dart';
 import '../../../../auth/presentation/widgets/backend_test_modal.dart';
 import '../modals/profile_edit_modal.dart';
@@ -21,13 +23,27 @@ class ProfileTab extends StatefulWidget {
 }
 
 class _ProfileTabState extends State<ProfileTab> {
-  // 프로필 이미지는 AuthStateManager에서 관리
-  
+  int _followerCount = 0;
+  int _followingCount = 0;
+
   @override
   void initState() {
     super.initState();
-    // AuthStateManager 상태 변화 리스너 추가
     AuthStateManager.instance.addStateChangeListener(_onAuthStateChanged);
+    if (AuthStateManager.instance.isLoggedIn) {
+      _loadStats();
+    }
+  }
+
+  Future<void> _loadStats() async {
+    final userId = SupabaseService.instance.currentUser?.id ?? '';
+    if (userId.isEmpty) return;
+    final counts = await FollowService.instance.getCounts(userId);
+    if (!mounted) return;
+    setState(() {
+      _followerCount = counts.followers;
+      _followingCount = counts.following;
+    });
   }
 
   @override
@@ -172,8 +188,8 @@ class _ProfileTabState extends State<ProfileTab> {
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
                     _buildStatItem('Jam 세션', '12'),
-                    _buildStatItem('팔로워', '1.2K', onTap: () => _showSocialModal('followers')),
-                    _buildStatItem('팔로잉', '856', onTap: () => _showSocialModal('following')),
+                    _buildStatItem('팔로워', _followerCount.toString(), onTap: () => _showSocialModal('followers')),
+                    _buildStatItem('팔로잉', _followingCount.toString(), onTap: () => _showSocialModal('following')),
                   ],
                 ),
               ),

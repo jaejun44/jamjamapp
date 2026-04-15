@@ -163,6 +163,16 @@ class FeedService {
     };
   }
 
+  /// 내 피드 목록 가져오기
+  Future<List<Map<String, dynamic>>> getMyFeeds() async {
+    try {
+      final rows = await SupabaseService.instance.getMyFeeds();
+      return rows.map(_mapRow).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
   /// Supabase에서 피드 삭제 (논블로킹)
   Future<void> deleteFeed(String supabaseId) async {
     try {

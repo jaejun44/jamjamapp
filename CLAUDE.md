@@ -39,9 +39,31 @@ Supabase 백엔드 연동 (Phase A→B→C→D) 완성. UI 코드는 건드리�
 
 ---
 
-## 현재 상태: Phase A 완료 ✅ / Phase B 완료 ✅
+## 현재 상태: Phase A 완료 ✅ / Phase B 완료 ✅ / Phase C 완료 ✅ / Phase D 완료 ✅
 
 브랜치: `feat/supabase-bridge`
+
+### Phase C/D 진행 현황
+
+| 단계 | 상태 | 내용 |
+|------|------|------|
+| C-1 SQL migration | ✅ 완료 | `supabase/migrations/003_phase_c_likes_bookmarks.sql` 실행 완료 (사용자 진행) |
+| C-2 like_service.dart | ✅ 완료 | `LikeService` 신규 생성 (`getLikedFeeds`, `like`, `unlike`, `isLiked`) |
+| C-3 supabase_service.dart | ✅ 완료 | `getLikedFeeds`, `likeFeed`, `unlikeFeed`, `isFeedLiked` 4개 메서드 추가 |
+| C-4 liked_content_screen.dart + home_tab.dart | ✅ 완료 | 좋아요 화면 Supabase 연동, `_toggleLike` LikeService 연동 |
+| C-5 search_tab.dart | ✅ 완료 | `searchProfiles()` 연동, `_mapProfileToMusician` 헬퍼 추가 |
+| C-6 profile_tab.dart | ✅ 완료 | 팔로워/팔로잉 카운트 실시간 로드 (`FollowService.getCounts`) |
+| D-1 my_music_screen.dart | ✅ 완료 | `FeedService.getMyFeeds()` + `supabase_service.getMyFeeds()` 연동 |
+| D-2 recommendation_service.dart | ✅ 완료 | 하드코딩 제거, `ConnectService.getCandidates()` 연동 |
+| D-3 commit + PR | ✅ 완료 | |
+
+### Phase C/D 중요 메모
+- `LikeService`: `feed_likes` 테이블, UUID 문자열 feedId 사용
+- `home_tab._toggleLike`: `supabaseId` 있으면 LikeService, 없으면 CounterService 폴백
+- `search_tab._executeAdvancedSearch`: 쿼리 비어있으면 로컬 검색, 있으면 Supabase `searchProfiles()`
+- `profile_tab`: `_loadStats()` → `FollowService.getCounts(userId)` → `_followerCount`/`_followingCount`
+- `my_music_screen`: feeds → music card 포맷 변환 (`_feedToMusic`), supabaseId 있을 때만 실제 삭제
+- `recommendation_service`: 스코어링 로직 제거, ConnectService 후보를 최대 limit개 반환
 
 ### Phase B 진행 현황
 

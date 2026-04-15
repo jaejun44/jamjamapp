@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
 import 'package:jamjamapp/core/services/search_service.dart';
 import 'package:jamjamapp/core/services/auth_state_manager.dart';
+import 'package:jamjamapp/core/services/supabase_service.dart';
 import '../screens/user_profile_screen.dart';
 import 'dart:async';
 
@@ -267,6 +268,33 @@ class _SearchTabState extends State<SearchTab> {
     });
   }
 
+  /// Supabase profiles 행 → musician 카드 Map으로 변환
+  Map<String, dynamic> _mapProfileToMusician(Map<String, dynamic> profile) {
+    final name = (profile['nickname'] as String?)?.isNotEmpty == true
+        ? profile['nickname'] as String
+        : (profile['username'] as String? ?? '알 수 없음');
+    final instruments = profile['instruments'];
+    final instrument = instruments is List && instruments.isNotEmpty
+        ? instruments.first.toString()
+        : '악기 없음';
+    final initial = name.isNotEmpty ? name[0] : '?';
+    return {
+      'id': profile['id'] ?? '',
+      'name': name,
+      'genre': '일반',
+      'instrument': instrument,
+      'location': '미등록',
+      'followers': 0,
+      'following': 0,
+      'posts': 0,
+      'bio': profile['bio'] as String? ?? '',
+      'avatar': initial,
+      'isOnline': false,
+      'verified': false,
+      'tags': <String>[],
+    };
+  }
+
   /// 고급 검색 실행
   Future<void> _executeAdvancedSearch(String query) async {
     if (!mounted) return;
@@ -281,20 +309,28 @@ class _SearchTabState extends State<SearchTab> {
     });
 
     try {
-      // 고급 검색 실행
-      List<Map<String, dynamic>> results = await _searchService.performAdvancedSearch(
-        query: query,
-        musicians: _allMusicians,
-        genres: _selectedGenres,
-        instruments: _selectedInstruments,
-        locations: _selectedLocations,
-        sortBy: _sortBy,
-        sortOrder: _sortOrder,
-        minFollowers: _minFollowers,
-        maxFollowers: _maxFollowers,
-        isOnline: _isOnline,
-        isVerified: _isVerified,
-      );
+      List<Map<String, dynamic>> results;
+
+      if (query.trim().isNotEmpty) {
+        // Supabase profiles 검색
+        final rows = await SupabaseService.instance.searchProfiles(query.trim());
+        results = rows.map(_mapProfileToMusician).toList();
+      } else {
+        // 빈 검색어 → 로컬 목록 유지
+        results = await _searchService.performAdvancedSearch(
+          query: query,
+          musicians: _allMusicians,
+          genres: _selectedGenres,
+          instruments: _selectedInstruments,
+          locations: _selectedLocations,
+          sortBy: _sortBy,
+          sortOrder: _sortOrder,
+          minFollowers: _minFollowers,
+          maxFollowers: _maxFollowers,
+          isOnline: _isOnline,
+          isVerified: _isVerified,
+        );
+      }
 
       if (mounted) {
         setState(() {

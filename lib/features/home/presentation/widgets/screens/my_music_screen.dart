@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:jamjamapp/core/theme/app_theme.dart';
+import 'package:jamjamapp/core/services/feed_service.dart';
 
 class MyMusicScreen extends StatefulWidget {
   const MyMusicScreen({super.key});
@@ -21,84 +22,34 @@ class _MyMusicScreenState extends State<MyMusicScreen> {
   }
 
   Future<void> _loadMyMusic() async {
-    // 시뮬레이션된 로딩
-    await Future.delayed(const Duration(milliseconds: 500));
-    
+    final feeds = await FeedService.instance.getMyFeeds();
+    if (!mounted) return;
     setState(() {
-      _myMusic = [
-        {
-          'id': '1',
-          'title': 'Jazz Night',
-          'genre': '재즈',
-          'duration': '3:45',
-          'uploadDate': '2024-11-30',
-          'plays': 1250,
-          'likes': 89,
-          'comments': 23,
-          'thumbnail': null,
-          'audioUrl': 'jazz_night.mp3',
-          'description': '밤에 연주한 재즈 곡입니다.',
-          'tags': ['재즈', '피아노', '밤'],
-        },
-        {
-          'id': '2',
-          'title': 'Rock Jam Session',
-          'genre': '락',
-          'duration': '5:20',
-          'uploadDate': '2024-11-28',
-          'plays': 2100,
-          'likes': 156,
-          'comments': 45,
-          'thumbnail': null,
-          'audioUrl': 'rock_jam.mp3',
-          'description': '친구들과 함께한 락 잼 세션입니다.',
-          'tags': ['락', '기타', '드럼'],
-        },
-        {
-          'id': '3',
-          'title': 'Pop Cover - Shape of You',
-          'genre': '팝',
-          'duration': '4:15',
-          'uploadDate': '2024-11-25',
-          'plays': 890,
-          'likes': 67,
-          'comments': 12,
-          'thumbnail': null,
-          'audioUrl': 'shape_of_you_cover.mp3',
-          'description': 'Ed Sheeran의 Shape of You 커버입니다.',
-          'tags': ['팝', '커버', '어쿠스틱'],
-        },
-        {
-          'id': '4',
-          'title': 'Classical Piano Sonata',
-          'genre': '클래식',
-          'duration': '8:30',
-          'uploadDate': '2024-11-20',
-          'plays': 450,
-          'likes': 34,
-          'comments': 8,
-          'thumbnail': null,
-          'audioUrl': 'piano_sonata.mp3',
-          'description': '베토벤 피아노 소나타 연주입니다.',
-          'tags': ['클래식', '피아노', '베토벤'],
-        },
-        {
-          'id': '5',
-          'title': 'Electronic Beat',
-          'genre': '일렉트로닉',
-          'duration': '6:45',
-          'uploadDate': '2024-11-18',
-          'plays': 3200,
-          'likes': 234,
-          'comments': 67,
-          'thumbnail': null,
-          'audioUrl': 'electronic_beat.mp3',
-          'description': 'DAW로 만든 일렉트로닉 비트입니다.',
-          'tags': ['일렉트로닉', '비트', 'DAW'],
-        },
-      ];
+      _myMusic = feeds.map(_feedToMusic).toList();
       _isLoading = false;
     });
+  }
+
+  Map<String, dynamic> _feedToMusic(Map<String, dynamic> feed) {
+    final mediaUrl = feed['mediaUrl'] as String?;
+    final mediaType = feed['mediaType'] as String? ?? 'text';
+    return {
+      'id': feed['supabaseId'] ?? feed['id'].toString(),
+      'supabaseId': feed['supabaseId'],
+      'title': (feed['title'] as String?)?.isNotEmpty == true
+          ? feed['title'] as String
+          : feed['content'] as String? ?? '',
+      'genre': feed['genre'] as String? ?? '일반',
+      'duration': '-',
+      'uploadDate': feed['timestamp'] as String? ?? '',
+      'plays': 0,
+      'likes': feed['likes'] as int? ?? 0,
+      'comments': feed['comments'] as int? ?? 0,
+      'thumbnail': null,
+      'audioUrl': mediaType == 'audio' ? mediaUrl : null,
+      'description': feed['content'] as String? ?? '',
+      'tags': (feed['tags'] as List?)?.cast<String>() ?? <String>[],
+    };
   }
 
   List<Map<String, dynamic>> get _filteredMusic {
@@ -559,12 +510,19 @@ class _MyMusicScreenState extends State<MyMusicScreen> {
             child: const Text('취소', style: TextStyle(color: AppTheme.grey)),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
+              final supabaseId = music['supabaseId'] as String?;
+              final nav = Navigator.of(context);
+              final messenger = ScaffoldMessenger.of(context);
+              if (supabaseId != null) {
+                await FeedService.instance.deleteFeed(supabaseId);
+              }
+              if (!mounted) return;
               setState(() {
                 _myMusic.removeWhere((item) => item['id'] == music['id']);
               });
-              Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
+              nav.pop();
+              messenger.showSnackBar(
                 const SnackBar(
                   content: Text('음악이 삭제되었습니다'),
                   backgroundColor: AppTheme.accentPink,
