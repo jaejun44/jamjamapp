@@ -8,10 +8,12 @@ import 'package:jamjamapp/core/services/like_service.dart';
 import 'package:jamjamapp/core/services/feed_service.dart';
 import 'package:jamjamapp/core/services/follow_service.dart';
 import 'package:jamjamapp/core/services/supabase_service.dart';
+import 'package:jamjamapp/core/services/connect_service.dart';
 import '../modals/comment_modal.dart';
 import '../modals/file_upload_modal.dart';
 import '../screens/user_profile_screen.dart';
 import '../shared/feed_card.dart';
+import '../shared/musician_card_widget.dart';
 import '../modals/share_modal.dart';
 import '../modals/feed_edit_modal.dart';
 import '../screens/trending_feeds_screen.dart';
@@ -27,7 +29,7 @@ class HomeTab extends StatefulWidget {
   State<HomeTab> createState() => _HomeTabState();
 }
 
-class _HomeTabState extends State<HomeTab> {
+class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
   // AppStateManager를 통해 상태 관리
   final AppStateManager _appStateManager = AppStateManager.instance;
   
@@ -135,6 +137,9 @@ class _HomeTabState extends State<HomeTab> {
   // 피드 모드: '전체' | '팔로잉'
   String _feedMode = '전체';
 
+  // 서브탭 컨트롤러 (피드 | Connect)
+  late TabController _tabController;
+
   // 읽지 않은 알림 수
   int _unreadNotificationCount = 0;
 
@@ -147,6 +152,7 @@ class _HomeTabState extends State<HomeTab> {
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     _loadInitialData();
     _setupScrollListener();
     _startRealtimeUpdates();
@@ -161,6 +167,7 @@ class _HomeTabState extends State<HomeTab> {
 
   @override
   void dispose() {
+    _tabController.dispose();
     _scrollController.dispose();
     _realtimeUpdateTimer?.cancel();
     super.dispose();
@@ -1022,63 +1029,105 @@ class _HomeTabState extends State<HomeTab> {
       body: SafeArea(
         child: Column(
           children: [
-            // 헤더
             _buildHeader(context),
-            
-              // 전체 | 팔로잉 토글
-            _buildFeedModeToggle(),
-
-            // 피드 목록 (새로고침 + 무한 스크롤)
+            _buildSubTabBar(),
             Expanded(
-              child: RefreshIndicator(
-                onRefresh: _refreshFeeds,
-                color: AppTheme.accentPink,
-                backgroundColor: AppTheme.secondaryBlack,
-                child: ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: _feedData.length + (_hasMoreData ? 1 : 0),
-                  itemBuilder: (context, index) {
-                    if (index == _feedData.length) {
-                      // 로딩 인디케이터
-                      return _buildLoadingIndicator();
-                    }
-                    final feed = _feedData[index];
-                    return FeedCard(
-                      key: ValueKey(feed['id']),
-                      feed: feed,
-                      index: index,
-                      isLiked: _likedFeeds[index] ?? false,
-                      isSaved: _savedFeeds[index] == true,
-                      isFollowed: _followedUsers.contains(feed['author']),
-                      onToggleLike: () => _toggleLike(index),
-                      onToggleSave: () => _toggleSave(index),
-                      onToggleFollow: () => _toggleFollow(feed['author']),
-                      onShowComments: () => _showCommentModal(feed),
-                      onShowShare: () => _showShareModal(feed),
-                      onShowOptions: () => _showFeedOptions(feed),
-                      onTapProfile: () => _showUserProfile(feed['author']),
-                    );
-                  },
-                ),
+              child: TabBarView(
+                controller: _tabController,
+                physics: const NeverScrollableScrollPhysics(),
+                children: [
+                  _buildFeedTab(),
+                  const _ConnectSubTab(),
+                ],
               ),
             ),
           ],
         ),
       ),
-      // 피드 추가 플로팅 버튼
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          _showAddFeedModal();
+      floatingActionButton: ListenableBuilder(
+        listenable: _tabController,
+        builder: (context, _) {
+          if (_tabController.index != 0) return const SizedBox.shrink();
+          return FloatingActionButton(
+            onPressed: _showAddFeedModal,
+            backgroundColor: AppTheme.accentPink,
+            shape: const CircleBorder(
+              side: BorderSide(color: AppTheme.outlineBlack, width: 2),
+            ),
+            child: const Icon(Icons.add, color: Colors.white, size: 30),
+          );
         },
-        backgroundColor: AppTheme.accentPink,
-        child: const Icon(
-          Icons.add,
-          color: AppTheme.white,
-          size: 30,
-        ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+    );
+  }
+
+  /// PPG 스타일 서브탭 바 (피드 | Connect)
+  Widget _buildSubTabBar() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppTheme.lightGrey,
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(color: AppTheme.outlineBlack, width: 2),
+      ),
+      child: TabBar(
+        controller: _tabController,
+        indicator: BoxDecoration(
+          color: AppTheme.accentPink,
+          borderRadius: BorderRadius.circular(28),
+        ),
+        indicatorSize: TabBarIndicatorSize.tab,
+        labelColor: Colors.white,
+        unselectedLabelColor: AppTheme.outlineBlack,
+        labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+        unselectedLabelStyle:
+            const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+        dividerColor: Colors.transparent,
+        tabs: const [Tab(text: '피드'), Tab(text: 'Connect')],
+      ),
+    );
+  }
+
+  /// 피드 서브탭 콘텐츠
+  Widget _buildFeedTab() {
+    return Column(
+      children: [
+        _buildFeedModeToggle(),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _refreshFeeds,
+            color: AppTheme.accentPink,
+            backgroundColor: AppTheme.secondaryBlack,
+            child: ListView.builder(
+              controller: _scrollController,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: _feedData.length + (_hasMoreData ? 1 : 0),
+              itemBuilder: (context, index) {
+                if (index == _feedData.length) {
+                  return _buildLoadingIndicator();
+                }
+                final feed = _feedData[index];
+                return FeedCard(
+                  key: ValueKey(feed['id']),
+                  feed: feed,
+                  index: index,
+                  isLiked: _likedFeeds[index] ?? false,
+                  isSaved: _savedFeeds[index] == true,
+                  isFollowed: _followedUsers.contains(feed['author']),
+                  onToggleLike: () => _toggleLike(index),
+                  onToggleSave: () => _toggleSave(index),
+                  onToggleFollow: () => _toggleFollow(feed['author']),
+                  onShowComments: () => _showCommentModal(feed),
+                  onShowShare: () => _showShareModal(feed),
+                  onShowOptions: () => _showFeedOptions(feed),
+                  onTapProfile: () => _showUserProfile(feed['author']),
+                );
+              },
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1417,5 +1466,136 @@ class _HomeTabState extends State<HomeTab> {
       ),
     );
   }
+}
 
-} 
+// ── Connect 서브탭 (Scaffold 없이 HomeTab에 임베드) ─────────────────────────────
+
+class _ConnectSubTab extends StatefulWidget {
+  const _ConnectSubTab();
+
+  @override
+  State<_ConnectSubTab> createState() => _ConnectSubTabState();
+}
+
+class _ConnectSubTabState extends State<_ConnectSubTab> {
+  List<Map<String, dynamic>> _candidates = [];
+  int _currentIndex = 0;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCandidates();
+  }
+
+  Future<void> _loadCandidates() async {
+    final candidates = await ConnectService.instance.getCandidates();
+    if (!mounted) return;
+    setState(() {
+      _candidates = candidates;
+      _currentIndex = 0;
+      _isLoading = false;
+    });
+  }
+
+  Future<void> _handleLike() async {
+    if (_currentIndex >= _candidates.length) return;
+    final target = _candidates[_currentIndex];
+    final toId = target['userId'] as String;
+    final matched = await ConnectService.instance.like(toId);
+    if (!mounted) return;
+    if (matched) _showMatchDialog(target);
+    setState(() => _currentIndex++);
+  }
+
+  void _handlePass() {
+    if (_currentIndex >= _candidates.length) return;
+    setState(() => _currentIndex++);
+  }
+
+  void _showMatchDialog(Map<String, dynamic> user) {
+    final nickname = user['nickname'] as String? ?? 'Unknown';
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.secondaryBlack,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          '🎵 매칭 성사!',
+          style: TextStyle(color: AppTheme.white, fontWeight: FontWeight.bold),
+          textAlign: TextAlign.center,
+        ),
+        content: Text(
+          '$nickname님과 연결되었습니다!\n채팅을 시작해보세요.',
+          style: const TextStyle(color: AppTheme.grey),
+          textAlign: TextAlign.center,
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('확인'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppTheme.accentPink),
+      );
+    }
+
+    if (_candidates.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.people_outline, color: AppTheme.grey, size: 64),
+            SizedBox(height: 16),
+            Text(
+              '추천할 뮤지션이 없습니다',
+              style: TextStyle(color: AppTheme.grey, fontSize: 16),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_currentIndex >= _candidates.length) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.check_circle_outline,
+                color: AppTheme.accentPink, size: 64),
+            const SizedBox(height: 16),
+            const Text(
+              '모든 추천 뮤지션을 확인했습니다!',
+              style: TextStyle(color: AppTheme.grey, fontSize: 16),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () {
+                setState(() => _isLoading = true);
+                _loadCandidates();
+              },
+              child: const Text('새로고침'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      child: MusicianCardWidget(
+        user: _candidates[_currentIndex],
+        onLike: _handleLike,
+        onPass: _handlePass,
+      ),
+    );
+  }
+}

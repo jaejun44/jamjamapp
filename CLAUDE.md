@@ -33,15 +33,56 @@
 
 ## 전체 목표
 
-Supabase 백엔드 연동 (Phase A→B→C→D) 완성. UI 코드는 건드리지 않고 Service 계층만 교체.
+Supabase 백엔드 연동 완성 + PPG(파워퍼프걸) 스타일 UI 리디자인.
 
 `flutter analyze --no-pub` → **항상 No issues found! 유지**
 
 ---
 
-## 현재 상태: Phase A 완료 ✅ / Phase B 완료 ✅ / Phase C 완료 ✅ / Phase D 완료 ✅
+## 현재 상태: Phase A~F 진행 중
 
-브랜치: `feat/supabase-bridge`
+브랜치: `feat/supabase-bridge` | 최근 커밋: (이번 커밋)
+
+### Phase F — PPG UI 리디자인 + 네비게이션 구조 개편 🚧
+
+| 단계 | 상태 | 내용 |
+|------|------|------|
+| F-1 app_theme.dart | ✅ 완료 | PPG 라이트 테마 전환 — cream(`#FFFEF5`) 배경, hot pink(`#FF5CA8`), 두꺼운 아웃라인, 하위호환 컬러 앨리어스 유지 |
+| F-2 main_screen.dart | ✅ 완료 | 탭 5개 → 3개 (홈·검색·프로필), Jam/친구/채팅 탭 제거, 상단 2px 검정 보더 |
+| F-3 home_tab.dart | ✅ 완료 | Connect 서브탭 내장 — PPG pill 탭바(피드\|Connect) + `TabController` + `_ConnectSubTab` + FAB 조건부 노출 |
+
+### Phase F 중요 메모
+- `app_theme.dart` 하위호환: `primaryBlack`=크림, `secondaryBlack`=흰색카드, `white`=다크텍스트 (기존 위젯 수정 불필요)
+- `_ConnectSubTab`: Scaffold 없이 `home_tab.dart` 하단에 private 클래스로 임베드, ConnectService 로직 그대로 복제
+- FAB: `ListenableBuilder(_tabController)` → 피드 탭(index=0)에서만 노출
+- `_buildSubTabBar()`: `lightGrey` 배경 + `outlineBlack` 2px 보더 + `accentPink` 인디케이터 pill 모양
+- `TabBarView(physics: NeverScrollableScrollPhysics)` — 스와이프 전환 비활성화
+
+### 다음 작업 후보 (Phase G)
+- [ ] `my_music_screen` 업로드 다이얼로그 실제 구현 (현재 placeholder)
+- [ ] Supabase `media` 버킷 생성 확인 및 public 권한 설정
+- [ ] `uploadMedia()` 확장자 하드코딩 개선 (실제 파일 MIME 타입 기반)
+- [ ] 홈 피드 → 프로필 탭 "내 음악" 크로스 탭 데이터 일관성 검증
+- [ ] 나머지 위젯 PPG 스타일 세부 다듬기 (카드 보더, 버튼 형태 등)
+
+---
+
+### Phase E — 버그 수정 및 미디어 업로드 개선 ✅
+
+| 단계 | 상태 | 내용 |
+|------|------|------|
+| E-1 feed_service.dart | ✅ 완료 | `createFeed()` 미디어 업로드 try/catch 분리 |
+| E-2 jam_creation_tab.dart | ✅ 완료 | `StatefulBuilder` + `_modalSetState` 패턴으로 모달 내 미리보기 즉시 반영 |
+| E-3 media_file_picker_web.dart | ✅ 완료 | 브라우저 native `<input type="file">` 기반 파일 피커 |
+| E-4 video_blob_helper_web.dart | ✅ 완료 | 웹에서 Uint8List → Blob URL 변환 유틸 |
+| E-5 app_theme.dart | ✅ 완료 | (F-1에서 PPG 테마로 교체됨) |
+
+### Phase E 중요 메모
+- `feed_service.createFeed()`: 미디어 업로드 실패 → `resolvedUrl = null` 폴백, 피드 insert는 반드시 실행
+- `media` Supabase Storage 버킷이 없으면 업로드 실패 → 피드는 미디어 URL 없이 저장됨 (정상 폴백)
+- 미디어 확장자는 `uploadMedia()`에서 하드코딩(mp3/mp4/jpg) — 실제 파일 타입과 다를 수 있음
+
+---
 
 ### Phase C/D 진행 현황
 
