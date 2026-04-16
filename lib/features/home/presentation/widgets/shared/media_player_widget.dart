@@ -83,6 +83,13 @@ class _MediaPlayerWidgetState extends State<MediaPlayerWidget> {
         await _initializeVideoPlayer();
       } else if (widget.mediaType == 'audio') {
         await _initializeAudioPlayer();
+      } else {
+        // image 및 기타 타입: 비동기 초기화 불필요, 즉시 완료
+        if (mounted) {
+          setState(() {
+            _isInitialized = true;
+          });
+        }
       }
     } catch (e) { // ignore: empty_catches
     }
@@ -206,6 +213,8 @@ class _MediaPlayerWidgetState extends State<MediaPlayerWidget> {
       return _buildVideoPlayer();
     } else if (widget.mediaType == 'audio') {
       return _buildAudioPlayer();
+    } else if (widget.mediaType == 'image') {
+      return _buildImageViewer();
     } else {
       return _buildPlaceholder();
     }
@@ -377,6 +386,34 @@ class _MediaPlayerWidgetState extends State<MediaPlayerWidget> {
         ],
       ),
     );
+  }
+
+  /// 이미지 뷰어
+  Widget _buildImageViewer() {
+    if (widget.mediaData != null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Image.memory(
+          widget.mediaData!,
+          fit: BoxFit.cover,
+          width: double.infinity,
+          errorBuilder: (_, __, ___) => _buildPlaceholder(),
+        ),
+      );
+    } else if (widget.mediaUrl != null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Image.network(
+          widget.mediaUrl!,
+          fit: BoxFit.cover,
+          width: double.infinity,
+          errorBuilder: (_, __, ___) => _buildPlaceholder(),
+          loadingBuilder: (_, child, progress) =>
+              progress == null ? child : _buildLoadingState(),
+        ),
+      );
+    }
+    return _buildPlaceholder();
   }
 
   /// 플레이스홀더 (이미지, 텍스트 등)

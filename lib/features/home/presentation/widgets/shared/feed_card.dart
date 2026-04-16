@@ -16,6 +16,7 @@ class FeedCard extends StatelessWidget {
   final VoidCallback onShowShare;
   final VoidCallback onShowOptions;
   final VoidCallback onTapProfile;
+  final VoidCallback onConnectDm;
 
   const FeedCard({
     super.key,
@@ -31,6 +32,7 @@ class FeedCard extends StatelessWidget {
     required this.onShowShare,
     required this.onShowOptions,
     required this.onTapProfile,
+    required this.onConnectDm,
   });
 
   Widget _buildSafeAvatarText(dynamic avatar) {
@@ -190,33 +192,31 @@ class FeedCard extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 _buildActionButton(context,
                   icon: isLiked ? Icons.favorite : Icons.favorite_border,
-                  label: '${feed['likes']}',
+                  label: '좋아요',
                   isActive: isLiked,
                   onTap: onToggleLike,
                 ),
-                const SizedBox(width: 24),
                 _buildActionButton(context,
                   icon: Icons.chat_bubble_outline,
-                  label: '${feed['comments']}',
+                  label: '댓글',
                   isActive: false,
                   onTap: onShowComments,
                 ),
-                const SizedBox(width: 24),
                 _buildActionButton(context,
-                  icon: Icons.share,
-                  label: '${feed['shares']}',
+                  icon: Icons.send_rounded,
+                  label: '컨넥트',
+                  isActive: false,
+                  onTap: onConnectDm,
+                ),
+                _buildActionButton(context,
+                  icon: Icons.share_rounded,
+                  label: '공유',
                   isActive: false,
                   onTap: onShowShare,
-                ),
-                const Spacer(),
-                _buildActionButton(context,
-                  icon: isSaved ? Icons.bookmark : Icons.bookmark_border,
-                  label: '저장',
-                  isActive: isSaved,
-                  onTap: onToggleSave,
                 ),
               ],
             ),

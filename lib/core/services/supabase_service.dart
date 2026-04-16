@@ -863,7 +863,7 @@ class SupabaseService {
     return (rows as List).cast<Map<String, dynamic>>();
   }
 
-  /// 피드 좋아요 추가 + likes_count 증가
+  /// 피드 좋아요 추가 + feed_likes 행 삽입
   Future<void> likeFeed(String feedId) async {
     final myId = currentUser?.id;
     if (myId == null) return;
@@ -871,10 +871,9 @@ class SupabaseService {
       {'user_id': myId, 'feed_id': feedId},
       onConflict: 'user_id,feed_id',
     );
-    await _client.rpc('increment_likes', params: {'feed_id_arg': feedId});
   }
 
-  /// 피드 좋아요 취소 + likes_count 감소
+  /// 피드 좋아요 취소 + feed_likes 행 삭제
   Future<void> unlikeFeed(String feedId) async {
     final myId = currentUser?.id;
     if (myId == null) return;
@@ -890,7 +889,6 @@ class SupabaseService {
         .delete()
         .eq('user_id', myId)
         .eq('feed_id', feedId);
-    await _client.rpc('decrement_likes', params: {'feed_id_arg': feedId});
   }
 
   /// 특정 피드에 좋아요 눌렀는지 확인

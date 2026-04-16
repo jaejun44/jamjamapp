@@ -109,7 +109,7 @@ class _SignupModalState extends State<SignupModal> {
   Widget build(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(
-        color: AppTheme.primaryBlack,
+        color: AppTheme.secondaryBlack,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       padding: EdgeInsets.only(
@@ -132,7 +132,7 @@ class _SignupModalState extends State<SignupModal> {
                       child: const Text(
                         '취소',
                         style: TextStyle(
-                          color: Colors.grey,
+                          color: AppTheme.grey,
                           fontSize: 16,
                         ),
                       ),
@@ -140,12 +140,12 @@ class _SignupModalState extends State<SignupModal> {
                     const Text(
                       '회원가입',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: AppTheme.white,
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(width: 60), // 균형을 위한 빈 공간
+                    const SizedBox(width: 60),
                   ],
                 ),
                 const SizedBox(height: 30),
@@ -153,20 +153,22 @@ class _SignupModalState extends State<SignupModal> {
                 // 닉네임 입력
                 TextFormField(
                   controller: _nicknameController,
-                  style: const TextStyle(color: Colors.white),
+                  style: const TextStyle(color: AppTheme.white),
                   decoration: InputDecoration(
                     labelText: '닉네임',
-                    labelStyle: const TextStyle(color: Colors.grey),
+                    labelStyle: const TextStyle(color: AppTheme.grey),
+                    filled: true,
+                    fillColor: AppTheme.primaryBlack,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: Colors.grey),
+                      borderSide: const BorderSide(color: AppTheme.lightGrey),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppTheme.accentPink),
+                      borderSide: const BorderSide(color: AppTheme.accentPink, width: 2),
                     ),
                   ),
                   validator: (value) {
@@ -185,20 +187,22 @@ class _SignupModalState extends State<SignupModal> {
                 TextFormField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
-                  style: const TextStyle(color: Colors.white),
+                  style: const TextStyle(color: AppTheme.white),
                   decoration: InputDecoration(
                     labelText: '이메일',
-                    labelStyle: const TextStyle(color: Colors.grey),
+                    labelStyle: const TextStyle(color: AppTheme.grey),
+                    filled: true,
+                    fillColor: AppTheme.primaryBlack,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: Colors.grey),
+                      borderSide: const BorderSide(color: AppTheme.lightGrey),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppTheme.accentPink),
+                      borderSide: const BorderSide(color: AppTheme.accentPink, width: 2),
                     ),
                   ),
                   validator: (value) {
@@ -217,25 +221,27 @@ class _SignupModalState extends State<SignupModal> {
                 TextFormField(
                   controller: _passwordController,
                   obscureText: _obscurePassword,
-                  style: const TextStyle(color: Colors.white),
+                  style: const TextStyle(color: AppTheme.white),
                   decoration: InputDecoration(
                     labelText: '비밀번호',
-                    labelStyle: const TextStyle(color: Colors.grey),
+                    labelStyle: const TextStyle(color: AppTheme.grey),
+                    filled: true,
+                    fillColor: AppTheme.primaryBlack,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: Colors.grey),
+                      borderSide: const BorderSide(color: AppTheme.lightGrey),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppTheme.accentPink),
+                      borderSide: const BorderSide(color: AppTheme.accentPink, width: 2),
                     ),
                     suffixIcon: IconButton(
                       icon: Icon(
                         _obscurePassword ? Icons.visibility : Icons.visibility_off,
-                        color: Colors.grey,
+                        color: AppTheme.grey,
                       ),
                       onPressed: () {
                         setState(() {
@@ -260,25 +266,27 @@ class _SignupModalState extends State<SignupModal> {
                 TextFormField(
                   controller: _confirmPasswordController,
                   obscureText: _obscureConfirmPassword,
-                  style: const TextStyle(color: Colors.white),
+                  style: const TextStyle(color: AppTheme.white),
                   decoration: InputDecoration(
                     labelText: '비밀번호 확인',
-                    labelStyle: const TextStyle(color: Colors.grey),
+                    labelStyle: const TextStyle(color: AppTheme.grey),
+                    filled: true,
+                    fillColor: AppTheme.primaryBlack,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: Colors.grey),
+                      borderSide: const BorderSide(color: AppTheme.lightGrey),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppTheme.accentPink),
+                      borderSide: const BorderSide(color: AppTheme.accentPink, width: 2),
                     ),
                     suffixIcon: IconButton(
                       icon: Icon(
                         _obscureConfirmPassword ? Icons.visibility : Icons.visibility_off,
-                        color: Colors.grey,
+                        color: AppTheme.grey,
                       ),
                       onPressed: () {
                         setState(() {

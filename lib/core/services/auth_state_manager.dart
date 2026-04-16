@@ -76,7 +76,8 @@ class AuthStateManager {
         await prefs.setString('userId', currentUser.id);
         await prefs.setString('userEmail', currentUser.email ?? '');
 
-        // 프로필 이미지 동기화
+        // 프로필 이미지 복원 (SharedPreferences → 캐시 → AuthStateManager)
+        await ProfileImageManager.instance.restoreImageOnLogin();
         final profileImageBytes = ProfileImageManager.instance.getCurrentUserProfileImage();
         if (profileImageBytes != null) {
           _profileImageBytes = profileImageBytes;

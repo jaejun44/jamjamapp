@@ -106,7 +106,7 @@ class _LoginModalState extends State<LoginModal> {
   Widget build(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(
-        color: AppTheme.primaryBlack,
+        color: AppTheme.secondaryBlack,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       padding: EdgeInsets.only(
@@ -129,7 +129,7 @@ class _LoginModalState extends State<LoginModal> {
                       child: const Text(
                         '취소',
                         style: TextStyle(
-                          color: Colors.grey,
+                          color: AppTheme.grey,
                           fontSize: 16,
                         ),
                       ),
@@ -137,7 +137,7 @@ class _LoginModalState extends State<LoginModal> {
                     const Text(
                       '로그인',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: AppTheme.white,
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
@@ -160,20 +160,22 @@ class _LoginModalState extends State<LoginModal> {
                 TextFormField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
-                  style: const TextStyle(color: Colors.white),
+                  style: const TextStyle(color: AppTheme.white),
                   decoration: InputDecoration(
                     labelText: '이메일',
-                    labelStyle: const TextStyle(color: Colors.grey),
+                    labelStyle: const TextStyle(color: AppTheme.grey),
+                    filled: true,
+                    fillColor: AppTheme.primaryBlack,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: Colors.grey),
+                      borderSide: const BorderSide(color: AppTheme.lightGrey),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppTheme.accentPink),
+                      borderSide: const BorderSide(color: AppTheme.accentPink, width: 2),
                     ),
                   ),
                   validator: (value) {
@@ -192,20 +194,22 @@ class _LoginModalState extends State<LoginModal> {
                 TextFormField(
                   controller: _passwordController,
                   obscureText: _obscurePassword,
-                  style: const TextStyle(color: Colors.white),
+                  style: const TextStyle(color: AppTheme.white),
                   decoration: InputDecoration(
                     labelText: '비밀번호',
-                    labelStyle: const TextStyle(color: Colors.grey),
+                    labelStyle: const TextStyle(color: AppTheme.grey),
+                    filled: true,
+                    fillColor: AppTheme.primaryBlack,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: Colors.grey),
+                      borderSide: const BorderSide(color: AppTheme.lightGrey),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppTheme.accentPink),
+                      borderSide: const BorderSide(color: AppTheme.accentPink, width: 2),
                     ),
                     suffixIcon: IconButton(
                       icon: Icon(

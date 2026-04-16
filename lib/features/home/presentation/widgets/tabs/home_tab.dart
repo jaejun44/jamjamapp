@@ -18,6 +18,7 @@ import '../modals/share_modal.dart';
 import '../modals/feed_edit_modal.dart';
 import '../screens/trending_feeds_screen.dart';
 import '../screens/notifications_screen.dart';
+import 'package:jamjamapp/features/chat/presentation/screens/chat_room_screen.dart';
 import 'package:jamjamapp/core/services/notification_service.dart';
 import 'dart:async';
 import 'dart:typed_data';
@@ -1122,6 +1123,7 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
                   onShowShare: () => _showShareModal(feed),
                   onShowOptions: () => _showFeedOptions(feed),
                   onTapProfile: () => _showUserProfile(feed['author']),
+                  onConnectDm: () => _openDm(feed),
                 );
               },
             ),
@@ -1463,6 +1465,22 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => UserProfileScreen(username: username),
+      ),
+    );
+  }
+
+  // 피드 작성자에게 DM(컨넥트) 열기
+  void _openDm(Map<String, dynamic> feed) {
+    final author = feed['author'] as String? ?? '?';
+    final avatar = feed['authorAvatar'];
+    final authorId = feed['authorId'] as String?;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ChatRoomScreen(
+          userName: author,
+          userAvatar: avatar is String ? avatar : '👤',
+          otherUserId: authorId,
+        ),
       ),
     );
   }
