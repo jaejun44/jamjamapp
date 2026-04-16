@@ -54,6 +54,9 @@ dependencies:
   # 웹 플랫폼 유틸리티
   web: ^1.1.0
 
+  # 폰트
+  google_fonts: ^6.2.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

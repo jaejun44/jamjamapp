@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 /// PPG(The Powerpuff Girls) 스타일 라이트 테마
 /// ⚠️ 하위호환성: 색상 이름은 기존 유지, 실제값은 라이트 팔레트로 교체
@@ -29,12 +30,12 @@ class AppTheme {
     scaffoldBackgroundColor: primaryBlack,
 
     // AppBar
-    appBarTheme: const AppBarTheme(
-      backgroundColor: Color(0xFFFFFFFF),
+    appBarTheme: AppBarTheme(
+      backgroundColor: const Color(0xFFFFFFFF),
       foregroundColor: outlineBlack,
       elevation: 0,
       centerTitle: true,
-      titleTextStyle: TextStyle(
+      titleTextStyle: GoogleFonts.nunito(
         color: outlineBlack,
         fontSize: 20,
         fontWeight: FontWeight.w900,
@@ -44,13 +45,14 @@ class AppTheme {
     ),
 
     // BottomNavigationBar
-    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-      backgroundColor: Color(0xFFFFFFFF),
+    bottomNavigationBarTheme: BottomNavigationBarThemeData(
+      backgroundColor: const Color(0xFFFFFFFF),
       selectedItemColor: hotPink,
       unselectedItemColor: grey,
       type: BottomNavigationBarType.fixed,
       elevation: 0,
-      selectedLabelStyle: TextStyle(fontWeight: FontWeight.w800),
+      selectedLabelStyle: GoogleFonts.nunito(fontWeight: FontWeight.w800, fontSize: 12),
+      unselectedLabelStyle: GoogleFonts.nunito(fontWeight: FontWeight.w600, fontSize: 12),
     ),
 
     // ElevatedButton — 둥근 + 아웃라인
@@ -101,20 +103,20 @@ class AppTheme {
       elevation: 0,
     ),
 
-    // TextTheme — 모두 다크 텍스트
-    textTheme: const TextTheme(
-      displayLarge:  TextStyle(color: outlineBlack, fontSize: 32, fontWeight: FontWeight.w900),
-      displayMedium: TextStyle(color: outlineBlack, fontSize: 28, fontWeight: FontWeight.w900),
-      displaySmall:  TextStyle(color: outlineBlack, fontSize: 24, fontWeight: FontWeight.w900),
-      headlineLarge: TextStyle(color: outlineBlack, fontSize: 22, fontWeight: FontWeight.w800),
-      headlineMedium:TextStyle(color: outlineBlack, fontSize: 20, fontWeight: FontWeight.w800),
-      headlineSmall: TextStyle(color: outlineBlack, fontSize: 18, fontWeight: FontWeight.w700),
-      titleLarge:    TextStyle(color: outlineBlack, fontSize: 16, fontWeight: FontWeight.w700),
-      titleMedium:   TextStyle(color: outlineBlack, fontSize: 14, fontWeight: FontWeight.w600),
-      titleSmall:    TextStyle(color: outlineBlack, fontSize: 12, fontWeight: FontWeight.w600),
-      bodyLarge:     TextStyle(color: outlineBlack, fontSize: 16),
-      bodyMedium:    TextStyle(color: outlineBlack, fontSize: 14),
-      bodySmall:     TextStyle(color: grey,         fontSize: 12),
+    // TextTheme — Nunito (PPG 둥글고 볼드한 느낌)
+    textTheme: GoogleFonts.nunitoTextTheme().copyWith(
+      displayLarge:  GoogleFonts.nunito(color: outlineBlack, fontSize: 32, fontWeight: FontWeight.w900),
+      displayMedium: GoogleFonts.nunito(color: outlineBlack, fontSize: 28, fontWeight: FontWeight.w900),
+      displaySmall:  GoogleFonts.nunito(color: outlineBlack, fontSize: 24, fontWeight: FontWeight.w900),
+      headlineLarge: GoogleFonts.nunito(color: outlineBlack, fontSize: 22, fontWeight: FontWeight.w800),
+      headlineMedium:GoogleFonts.nunito(color: outlineBlack, fontSize: 20, fontWeight: FontWeight.w800),
+      headlineSmall: GoogleFonts.nunito(color: outlineBlack, fontSize: 18, fontWeight: FontWeight.w700),
+      titleLarge:    GoogleFonts.nunito(color: outlineBlack, fontSize: 16, fontWeight: FontWeight.w700),
+      titleMedium:   GoogleFonts.nunito(color: outlineBlack, fontSize: 14, fontWeight: FontWeight.w600),
+      titleSmall:    GoogleFonts.nunito(color: outlineBlack, fontSize: 12, fontWeight: FontWeight.w600),
+      bodyLarge:     GoogleFonts.nunito(color: outlineBlack, fontSize: 16, fontWeight: FontWeight.w500),
+      bodyMedium:    GoogleFonts.nunito(color: outlineBlack, fontSize: 14, fontWeight: FontWeight.w500),
+      bodySmall:     GoogleFonts.nunito(color: grey,         fontSize: 12, fontWeight: FontWeight.w500),
     ),
   );
 }
